@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from 'react';
 import { supabase } from '@/lib/supabaseClient';
-import { buscarHorariosDisponiveis } from '@/lib/disponibilidade';
+import { buscarDisponibilidadeTodasQuadras } from '@/lib/disponibilidade';
 
 const NOMES_MODALIDADE = {
   altinha: 'Altinha',
@@ -11,16 +11,16 @@ const NOMES_MODALIDADE = {
   beach_tenis: 'Beach Tênis',
 };
 
-const ETAPAS = ['Quadra', 'Modalidade', 'Data e hora', 'Seus dados', 'Pagamento'];
+const ETAPAS = ['Data', 'Horário', 'Quadra', 'Modalidade', 'Seus dados', 'Pagamento'];
 
 export default function BookingFlow({ quadras, modalidades }) {
   const [etapa, setEtapa] = useState(0);
+  const [data, setData] = useState('');
+  const [disponibilidade, setDisponibilidade] = useState({}); // { quadraId: [slots] }
+  const [carregando, setCarregando] = useState(false);
+  const [horarioEscolhido, setHorarioEscolhido] = useState(null);
   const [quadraId, setQuadraId] = useState(null);
   const [modalidade, setModalidade] = useState(null);
-  const [data, setData] = useState('');
-  const [horarios, setHorarios] = useState([]);
-  const [horarioEscolhido, setHorarioEscolhido] = useState(null);
-  const [carregandoHorarios, setCarregandoHorarios] = useState(false);
   const [nome, setNome] = useState('');
   const [telefone, setTelefone] = useState('');
   const [email, setEmail] = useState('');
@@ -31,15 +31,39 @@ export default function BookingFlow({ quadras, modalidades }) {
 
   const hoje = new Date().toISOString().split('T')[0];
 
+  // Busca disponibilidade das 3 quadras assim que a data é escolhida
   useEffect(() => {
-    if (quadraId && data) {
-      setCarregandoHorarios(true);
+    if (data) {
+      setCarregando(true);
       setHorarioEscolhido(null);
-      buscarHorariosDisponiveis(quadraId, data)
-        .then(setHorarios)
-        .finally(() => setCarregandoHorarios(false));
+      setQuadraId(null);
+      buscarDisponibilidadeTodasQuadras(quadras.map((q) => q.id), data)
+        .then(setDisponibilidade)
+        .finally(() => setCarregando(false));
     }
-  }, [quadraId, data]);
+  }, [data]);
+
+  // Horários únicos onde PELO MENOS UMA quadra está livre
+  const horariosDisponiveis = (() => {
+    const todosSlots = Object.values(disponibilidade)[0] || [];
+    return todosSlots.map((slot) => {
+      const algumaQuadraLivre = quadras.some((q) =>
+        disponibilidade[q.id]?.some(
+          (s) => s.hora_inicio === slot.hora_inicio && s.disponivel
+        )
+      );
+      return { ...slot, disponivel: algumaQuadraLivre };
+    });
+  })();
+
+  // Quadras livres pro horário já escolhido
+  const quadrasDisponiveis = horarioEscolhido
+    ? quadras.filter((q) =>
+        disponibilidade[q.id]?.some(
+          (s) => s.hora_inicio === horarioEscolhido.hora_inicio && s.disponivel
+        )
+      )
+    : [];
 
   const modalidadeInfo = modalidades.find((m) => m.modalidade === modalidade);
   const valor = modalidadeInfo?.valor_hora_avulsa || 0;
@@ -48,7 +72,6 @@ export default function BookingFlow({ quadras, modalidades }) {
     setEnviando(true);
     setErro(null);
     try {
-      // encontra ou cria o cliente pelo telefone
       let { data: clienteExistente } = await supabase
         .from('clientes')
         .select('id')
@@ -89,7 +112,7 @@ export default function BookingFlow({ quadras, modalidades }) {
 
       if (erroReserva) {
         if (erroReserva.code === '23P01') {
-          throw new Error('Esse horário acabou de ser reservado por outra pessoa. Escolha outro horário.');
+          throw new Error('Esse horário acabou de ser reservado por outra pessoa. Escolha outro horário ou quadra.');
         }
         throw erroReserva;
       }
@@ -116,12 +139,14 @@ export default function BookingFlow({ quadras, modalidades }) {
     }
   }
 
+  const nomeQuadra = quadras.find((q) => q.id === quadraId)?.nome;
+
   if (reservaConfirmada) {
     return (
       <div className="bg-night-panel border border-night-line rounded-2xl p-8 text-center">
         <p className="text-sucesso font-display text-3xl tracking-wide mb-3">RESERVA CONFIRMADA</p>
         <p className="text-areia-muted mb-1">
-          {NOMES_MODALIDADE[modalidade]} · {data.split('-').reverse().join('/')} às {horarioEscolhido.hora_inicio}
+          {nomeQuadra} · {NOMES_MODALIDADE[modalidade]} · {data.split('-').reverse().join('/')} às {horarioEscolhido.hora_inicio}
         </p>
         <p className="text-areia-muted">Pagamento no local — {telefone}</p>
       </div>
@@ -135,12 +160,68 @@ export default function BookingFlow({ quadras, modalidades }) {
       <div className="bg-night-panel border border-night-line rounded-2xl p-6 mt-6">
         {etapa === 0 && (
           <div>
+            <h2 className="font-display text-2xl tracking-wide mb-4">ESCOLHA A DATA</h2>
+            <input
+              type="date"
+              min={hoje}
+              value={data}
+              onChange={(e) => { setData(e.target.value); }}
+              className="bg-night border border-night-line rounded-lg px-4 py-3 text-areia w-full mb-4"
+            />
+            <div className="flex justify-end">
+              <button
+                disabled={!data || carregando}
+                onClick={() => setEtapa(1)}
+                className="bg-coral hover:bg-coral-hover disabled:opacity-30 disabled:cursor-not-allowed text-night font-semibold px-6 py-2 rounded-full transition-colors"
+              >
+                {carregando ? 'Carregando...' : 'Continuar'}
+              </button>
+            </div>
+          </div>
+        )}
+
+        {etapa === 1 && (
+          <div>
+            <h2 className="font-display text-2xl tracking-wide mb-4">ESCOLHA O HORÁRIO</h2>
+            <div className="grid grid-cols-3 sm:grid-cols-4 gap-2">
+              {horariosDisponiveis.map((h) => (
+                <button
+                  key={h.hora_inicio}
+                  disabled={!h.disponivel}
+                  onClick={() => { setHorarioEscolhido(h); setQuadraId(null); }}
+                  className={`py-2 rounded-lg text-sm border transition-colors ${
+                    !h.disponivel
+                      ? 'border-night-line text-areia-muted/40 cursor-not-allowed line-through'
+                      : horarioEscolhido?.hora_inicio === h.hora_inicio
+                      ? 'border-coral bg-night text-coral'
+                      : 'border-night-line hover:border-areia-muted'
+                  }`}
+                >
+                  {h.hora_inicio}
+                </button>
+              ))}
+            </div>
+            <div className="flex justify-between mt-6">
+              <VoltarBotao onClick={() => setEtapa(0)} />
+              <button
+                disabled={!horarioEscolhido}
+                onClick={() => setEtapa(2)}
+                className="bg-coral hover:bg-coral-hover disabled:opacity-30 disabled:cursor-not-allowed text-night font-semibold px-6 py-2 rounded-full transition-colors"
+              >
+                Continuar
+              </button>
+            </div>
+          </div>
+        )}
+
+        {etapa === 2 && (
+          <div>
             <h2 className="font-display text-2xl tracking-wide mb-4">ESCOLHA A QUADRA</h2>
             <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-              {quadras.map((q) => (
+              {quadrasDisponiveis.map((q) => (
                 <button
                   key={q.id}
-                  onClick={() => { setQuadraId(q.id); setEtapa(1); }}
+                  onClick={() => setQuadraId(q.id)}
                   className={`p-5 rounded-xl border transition-colors text-left ${
                     quadraId === q.id ? 'border-coral bg-night' : 'border-night-line hover:border-areia-muted'
                   }`}
@@ -148,18 +229,31 @@ export default function BookingFlow({ quadras, modalidades }) {
                   <span className="font-semibold text-lg">{q.nome}</span>
                 </button>
               ))}
+              {quadrasDisponiveis.length === 0 && (
+                <p className="text-areia-muted text-sm col-span-3">Nenhuma quadra livre nesse horário.</p>
+              )}
+            </div>
+            <div className="flex justify-between mt-6">
+              <VoltarBotao onClick={() => setEtapa(1)} />
+              <button
+                disabled={!quadraId}
+                onClick={() => setEtapa(3)}
+                className="bg-coral hover:bg-coral-hover disabled:opacity-30 disabled:cursor-not-allowed text-night font-semibold px-6 py-2 rounded-full transition-colors"
+              >
+                Continuar
+              </button>
             </div>
           </div>
         )}
 
-        {etapa === 1 && (
+        {etapa === 3 && (
           <div>
             <h2 className="font-display text-2xl tracking-wide mb-4">ESCOLHA A MODALIDADE</h2>
             <div className="grid grid-cols-2 gap-3">
               {modalidades.map((m) => (
                 <button
                   key={m.modalidade}
-                  onClick={() => { setModalidade(m.modalidade); setEtapa(2); }}
+                  onClick={() => { setModalidade(m.modalidade); setEtapa(4); }}
                   className={`p-5 rounded-xl border transition-colors ${
                     modalidade === m.modalidade ? 'border-coral bg-night' : 'border-night-line hover:border-areia-muted'
                   }`}
@@ -172,55 +266,11 @@ export default function BookingFlow({ quadras, modalidades }) {
                 </button>
               ))}
             </div>
-            <VoltarBotao onClick={() => setEtapa(0)} />
+            <VoltarBotao onClick={() => setEtapa(2)} />
           </div>
         )}
 
-        {etapa === 2 && (
-          <div>
-            <h2 className="font-display text-2xl tracking-wide mb-4">DATA E HORÁRIO</h2>
-            <input
-              type="date"
-              min={hoje}
-              value={data}
-              onChange={(e) => setData(e.target.value)}
-              className="bg-night border border-night-line rounded-lg px-4 py-3 text-areia w-full mb-4"
-            />
-            {carregandoHorarios && <p className="text-areia-muted">Carregando horários...</p>}
-            {!carregandoHorarios && data && (
-              <div className="grid grid-cols-3 sm:grid-cols-4 gap-2">
-                {horarios.map((h) => (
-                  <button
-                    key={h.hora_inicio}
-                    disabled={!h.disponivel}
-                    onClick={() => setHorarioEscolhido(h)}
-                    className={`py-2 rounded-lg text-sm border transition-colors ${
-                      !h.disponivel
-                        ? 'border-night-line text-areia-muted/40 cursor-not-allowed line-through'
-                        : horarioEscolhido?.hora_inicio === h.hora_inicio
-                        ? 'border-coral bg-night text-coral'
-                        : 'border-night-line hover:border-areia-muted'
-                    }`}
-                  >
-                    {h.hora_inicio}
-                  </button>
-                ))}
-              </div>
-            )}
-            <div className="flex justify-between mt-6">
-              <VoltarBotao onClick={() => setEtapa(1)} />
-              <button
-                disabled={!horarioEscolhido}
-                onClick={() => setEtapa(3)}
-                className="bg-coral hover:bg-coral-hover disabled:opacity-30 disabled:cursor-not-allowed text-night font-semibold px-6 py-2 rounded-full transition-colors"
-              >
-                Continuar
-              </button>
-            </div>
-          </div>
-        )}
-
-        {etapa === 3 && (
+        {etapa === 4 && (
           <div>
             <h2 className="font-display text-2xl tracking-wide mb-4">SEUS DADOS</h2>
             <div className="space-y-3">
@@ -229,10 +279,10 @@ export default function BookingFlow({ quadras, modalidades }) {
               <Campo label="E-mail (opcional)" value={email} onChange={setEmail} />
             </div>
             <div className="flex justify-between mt-6">
-              <VoltarBotao onClick={() => setEtapa(2)} />
+              <VoltarBotao onClick={() => setEtapa(3)} />
               <button
                 disabled={!nome || !telefone}
-                onClick={() => setEtapa(4)}
+                onClick={() => setEtapa(5)}
                 className="bg-coral hover:bg-coral-hover disabled:opacity-30 disabled:cursor-not-allowed text-night font-semibold px-6 py-2 rounded-full transition-colors"
               >
                 Continuar
@@ -241,7 +291,7 @@ export default function BookingFlow({ quadras, modalidades }) {
           </div>
         )}
 
-        {etapa === 4 && (
+        {etapa === 5 && (
           <div>
             <h2 className="font-display text-2xl tracking-wide mb-2">PAGAMENTO</h2>
             <p className="text-areia-muted mb-4">Valor: <span className="text-areia font-semibold">R$ {Number(valor).toFixed(2)}</span></p>
@@ -267,7 +317,7 @@ export default function BookingFlow({ quadras, modalidades }) {
             </div>
             {erro && <p className="text-erro mb-4">{erro}</p>}
             <div className="flex justify-between">
-              <VoltarBotao onClick={() => setEtapa(3)} />
+              <VoltarBotao onClick={() => setEtapa(4)} />
               <button
                 disabled={!formaPagamento || enviando}
                 onClick={confirmarReserva}
