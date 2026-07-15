@@ -87,11 +87,9 @@ export default function AgendaDia({ quadras, modalidades, horaInicioNoturno }) {
     return `${dia}/${mes}/${ano}`;
   }
 
-  function corDoItem(item) {
+  function corModalidade(item) {
     if (!item) return null;
-    if (item.tipo === 'mensalista') return { bg: 'bg-volei/25', text: 'text-volei', borda: 'border-volei/40' };
-    if (item.status_pagamento === 'pago') return { bg: 'bg-sucesso/25', text: 'text-sucesso', borda: 'border-sucesso/40' };
-    return { bg: 'bg-aviso/25', text: 'text-aviso', borda: 'border-aviso/40' };
+    return modalidades.find((m) => m.modalidade === item.modalidade)?.cor || '#8a8a8a';
   }
 
   return (
@@ -158,7 +156,7 @@ export default function AgendaDia({ quadras, modalidades, horaInicioNoturno }) {
                 </div>
                 {quadras.map((q) => {
                   const item = itensPorQuadra[q.id]?.[slot.hora_inicio];
-                  const cor = corDoItem(item);
+                  const cor = corModalidade(item);
                   return (
                     <button
                       key={q.id}
@@ -167,19 +165,33 @@ export default function AgendaDia({ quadras, modalidades, horaInicioNoturno }) {
                           ? setDetalheItem({ item, quadra: q })
                           : setCelulaSelecionada({ quadra: q, horario: slot })
                       }
-                      className={`border-b border-night-line p-2 text-left text-xs min-h-[52px] transition-colors ${
+                      style={
                         item
-                          ? `${cor.bg} ${cor.text} border-l-2 ${cor.borda}`
-                          : 'hover:bg-night-line/40'
+                          ? { backgroundColor: `${cor}26`, borderLeft: `3px solid ${cor}`, color: cor }
+                          : undefined
+                      }
+                      className={`border-b border-night-line p-2 text-left text-xs min-h-[52px] transition-colors ${
+                        !item ? 'hover:bg-night-line/40' : ''
                       }`}
                     >
                       {item ? (
                         <>
                           <div className="font-semibold truncate">{item.clientes?.nome}</div>
-                          <div className="opacity-80 truncate">
-                            {item.tipo === 'mensalista'
-                              ? (item.alteradoHoje ? 'Mensalista (alterado hoje)' : 'Mensalista')
-                              : NOMES_MODALIDADE[item.modalidade]}
+                          <div className="opacity-90 truncate flex items-center gap-1">
+                            <span>
+                              {item.tipo === 'mensalista'
+                                ? (item.alteradoHoje ? 'Mensalista (alterado hoje)' : 'Mensalista')
+                                : NOMES_MODALIDADE[item.modalidade]}
+                            </span>
+                            {item.tipo === 'avulsa' && (
+                              <span
+                                className={`text-[10px] px-1 rounded-full ${
+                                  item.status_pagamento === 'pago' ? 'bg-sucesso/30 text-sucesso' : 'bg-aviso/30 text-aviso'
+                                }`}
+                              >
+                                {item.status_pagamento === 'pago' ? '✓' : '!'}
+                              </span>
+                            )}
                           </div>
                         </>
                       ) : (
