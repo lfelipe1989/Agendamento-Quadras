@@ -13,7 +13,7 @@ const NOMES_MODALIDADE = {
 
 const ETAPAS = ['Data', 'Horário', 'Quadra', 'Modalidade', 'Seus dados', 'Pagamento'];
 
-export default function BookingFlow({ quadras, modalidades }) {
+export default function BookingFlow({ quadras, modalidades, horaInicioNoturno }) {
   const [etapa, setEtapa] = useState(0);
   const [data, setData] = useState('');
   const [disponibilidade, setDisponibilidade] = useState({});
@@ -62,7 +62,10 @@ export default function BookingFlow({ quadras, modalidades }) {
     : [];
 
   const modalidadeInfo = modalidades.find((m) => m.modalidade === modalidade);
-  const valor = modalidadeInfo?.valor_hora_avulsa || 0;
+  const periodoNoturno = horarioEscolhido && horarioEscolhido.hora_inicio >= horaInicioNoturno;
+  const valor = modalidadeInfo
+    ? (periodoNoturno ? modalidadeInfo.valor_noturno : modalidadeInfo.valor_diurno)
+    : 0;
 
   async function confirmarReserva() {
     setEnviando(true);
@@ -293,7 +296,9 @@ export default function BookingFlow({ quadras, modalidades }) {
         {etapa === 5 && (
           <div>
             <h2 className="font-display text-2xl tracking-wide mb-2">PAGAMENTO</h2>
-            <p className="text-areia-muted mb-4">Valor: <span className="text-areia font-semibold">R$ {Number(valor).toFixed(2)}</span></p>
+            <p className="text-areia-muted mb-4">
+              Valor ({periodoNoturno ? 'noturno' : 'diurno'}): <span className="text-areia font-semibold">R$ {Number(valor).toFixed(2)}</span>
+            </p>
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mb-6">
               <button
                 onClick={() => setFormaPagamento('asaas_online')}
