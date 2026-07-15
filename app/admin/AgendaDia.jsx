@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useCallback } from 'react';
 import { supabase } from '@/lib/supabaseClient';
-import { buscarHorariosDisponiveis, buscarSlotsDoDia } from '@/lib/disponibilidade';
+import { buscarHorariosDisponiveis, buscarSlotsDoDia, buscarMensalistasEfetivosDoDia } from '@/lib/disponibilidade';
 
 const NOMES_MODALIDADE = {
   altinha: 'Altinha',
@@ -33,10 +33,11 @@ export default function AgendaDia({ quadras, modalidades, horaInicioNoturno }) {
   const carregar = useCallback(async () => {
     if (quadras.length === 0) return;
     setCarregando(true);
-    const diaSemana = new Date(`${data}T00:00:00`).getDay();
 
     const slotsDoDia = await buscarSlotsDoDia(data);
     setSlots(slotsDoDia);
+
+    const efetivosMensalistas = await buscarMensalistasEfetivosDoDia(data);
 
     const resultado = {};
     for (const q of quadras) {
@@ -48,16 +49,10 @@ export default function AgendaDia({ quadras, modalidades, horaInicioNoturno }) {
         .neq('status_reserva', 'cancelada')
         .order('hora_inicio');
 
-      const { data: mensalistas } = await supabase
-        .from('mensalistas')
-        .select('id, hora_inicio, hora_fim, modalidade, valor_mensal, clientes(nome, telefone)')
-        .eq('quadra_id', q.id)
-        .eq('dia_semana', diaSemana)
-        .eq('ativo', true)
-        .order('hora_inicio');
-
       const itensAvulsos = (reservas || []).map((r) => ({ ...r, tipo: 'avulsa' }));
-      const itensMensalistas = (mensalistas || []).map((m) => ({ ...m, tipo: 'mensalista' }));
+      const itensMensalistas = efetivosMensalistas
+        .filter((m) => m.quadra_id === q.id)
+        .map((m) => ({ ...m, id: m.mensalista_id, tipo: 'mensalista' }));
       const todosItens = [...itensAvulsos, ...itensMensalistas];
 
       // Marca TODOS os slots cobertos pelo intervalo do item (ex: reserva das 17h-20h
@@ -182,7 +177,9 @@ export default function AgendaDia({ quadras, modalidades, horaInicioNoturno }) {
                         <>
                           <div className="font-semibold truncate">{item.clientes?.nome}</div>
                           <div className="opacity-80 truncate">
-                            {item.tipo === 'mensalista' ? 'Mensalista' : NOMES_MODALIDADE[item.modalidade]}
+                            {item.tipo === 'mensalista'
+                              ? (item.alteradoHoje ? 'Mensalista (alterado hoje)' : 'Mensalista')
+                              : NOMES_MODALIDADE[item.modalidade]}
                           </div>
                         </>
                       ) : (
@@ -223,35 +220,174 @@ export default function AgendaDia({ quadras, modalidades, horaInicioNoturno }) {
       )}
 
       {detalheItem && detalheItem.item.tipo === 'mensalista' && (
-        <InfoMensalistaModal
-          item={detalheItem.item}
-          quadra={detalheItem.quadra}
+        <EditarMensalistaDiaModal
+          mensalistaId={detalheItem.item.id}
+          data={data}
+          quadras={quadras}
           modalidades={modalidades}
           onFechar={() => setDetalheItem(null)}
+          onAtualizado={() => { setDetalheItem(null); carregar(); }}
         />
       )}
     </div>
   );
 }
 
-function InfoMensalistaModal({ item, quadra, modalidades, onFechar }) {
-  const cor = modalidades.find((m) => m.modalidade === item.modalidade)?.cor;
+function EditarMensalistaDiaModal({ mensalistaId, data, quadras, modalidades, onFechar, onAtualizado }) {
+  const [carregando, setCarregando] = useState(true);
+  const [clienteNome, setClienteNome] = useState('');
+  const [clienteTelefone, setClienteTelefone] = useState('');
+  const [base, setBase] = useState(null); // dados fixos do cadastro (horário normal)
+  const [opcao, setOpcao] = useState('normal'); // 'normal' | 'alterado' | 'cancelado'
+  const [quadraId, setQuadraId] = useState('');
+  const [modalidade, setModalidade] = useState('');
+  const [horaInicio, setHoraInicio] = useState('');
+  const [horaFim, setHoraFim] = useState('');
+  const [salvando, setSalvando] = useState(false);
+  const [erro, setErro] = useState(null);
+
+  useEffect(() => {
+    (async () => {
+      setCarregando(true);
+      const { data: m } = await supabase
+        .from('mensalistas')
+        .select('*, clientes(nome, telefone), quadras(nome)')
+        .eq('id', mensalistaId)
+        .single();
+
+      const { data: excecao } = await supabase
+        .from('mensalista_excecoes')
+        .select('*')
+        .eq('mensalista_id', mensalistaId)
+        .eq('data', data)
+        .maybeSingle();
+
+      if (m) {
+        setClienteNome(m.clientes?.nome || '');
+        setClienteTelefone(m.clientes?.telefone || '');
+        setBase(m);
+        setQuadraId(excecao?.quadra_id || m.quadra_id);
+        setModalidade(excecao?.modalidade || m.modalidade);
+        setHoraInicio((excecao?.hora_inicio || m.hora_inicio).slice(0, 5));
+        setHoraFim((excecao?.hora_fim || m.hora_fim).slice(0, 5));
+        setOpcao(excecao?.tipo || 'normal');
+      }
+      setCarregando(false);
+    })();
+  }, [mensalistaId, data]);
+
+  async function salvar() {
+    setSalvando(true);
+    setErro(null);
+    try {
+      if (opcao === 'normal') {
+        // remove qualquer exceção existente, voltando ao horário fixo normal
+        await supabase.from('mensalista_excecoes').delete().eq('mensalista_id', mensalistaId).eq('data', data);
+      } else if (opcao === 'cancelado') {
+        const { error } = await supabase
+          .from('mensalista_excecoes')
+          .upsert(
+            { mensalista_id: mensalistaId, data, tipo: 'cancelado', quadra_id: null, modalidade: null, hora_inicio: null, hora_fim: null },
+            { onConflict: 'mensalista_id,data' }
+          );
+        if (error) throw error;
+      } else if (opcao === 'alterado') {
+        const { error } = await supabase
+          .from('mensalista_excecoes')
+          .upsert(
+            { mensalista_id: mensalistaId, data, tipo: 'alterado', quadra_id: quadraId, modalidade, hora_inicio: horaInicio, hora_fim: horaFim },
+            { onConflict: 'mensalista_id,data' }
+          );
+        if (error) {
+          if (error.code === '23P01') throw new Error('Esse horário já está ocupado nessa quadra.');
+          throw error;
+        }
+      }
+      onAtualizado();
+    } catch (e) {
+      setErro(e.message || 'Erro ao salvar.');
+    } finally {
+      setSalvando(false);
+    }
+  }
+
+  const dataFormatada = data.split('-').reverse().join('/');
+
   return (
     <div className="fixed inset-0 bg-black/60 flex items-center justify-center p-4 z-50">
-      <div className="bg-night-panel border border-night-line rounded-2xl p-6 w-full max-w-sm">
-        <h3 className="font-display text-xl tracking-wide mb-1">{quadra.nome}</h3>
-        <p className="text-areia-muted text-sm mb-4">
-          {item.hora_inicio.slice(0, 5)}–{item.hora_fim.slice(0, 5)} ·{' '}
-          <span style={{ color: cor }}>{NOMES_MODALIDADE[item.modalidade]}</span>
-        </p>
-        <p className="font-semibold mb-1">{item.clientes?.nome}</p>
-        <p className="text-areia-muted text-sm mb-4">{item.clientes?.telefone}</p>
-        <p className="text-volei text-sm mb-4">
-          Esse é um horário fixo de mensalista. Pra editar dia, horário, modalidade ou valor, use a aba <strong>Mensalistas</strong> e clique no nome da pessoa.
-        </p>
-        <button onClick={onFechar} className="w-full text-areia-muted hover:text-areia text-sm py-2">
-          Fechar
-        </button>
+      <div className="bg-night-panel border border-night-line rounded-2xl p-6 w-full max-w-md max-h-[90vh] overflow-y-auto">
+        <h3 className="font-display text-xl tracking-wide mb-1">MENSALISTA · {dataFormatada}</h3>
+        {carregando ? (
+          <p className="text-areia-muted mt-4">Carregando...</p>
+        ) : (
+          <>
+            <p className="font-semibold mt-2">{clienteNome}</p>
+            <p className="text-areia-muted text-sm mb-4">{clienteTelefone}</p>
+            <p className="text-areia-muted text-xs mb-4">
+              Horário fixo normal: {base?.quadras?.nome} · {NOMES_MODALIDADE[base?.modalidade]} · {base?.hora_inicio?.slice(0, 5)}–{base?.hora_fim?.slice(0, 5)}
+            </p>
+            <p className="text-volei text-xs mb-4">
+              O que você mudar aqui vale só pra {dataFormatada}. O horário fixo definitivo continua igual — pra alterar pra sempre, use a aba Mensalistas.
+            </p>
+
+            <div className="space-y-2 mb-4">
+              <label className="flex items-center gap-2 text-sm">
+                <input type="radio" name="opcao" checked={opcao === 'normal'} onChange={() => setOpcao('normal')} />
+                Normal (horário fixo de sempre)
+              </label>
+              <label className="flex items-center gap-2 text-sm">
+                <input type="radio" name="opcao" checked={opcao === 'alterado'} onChange={() => setOpcao('alterado')} />
+                Alterado só nesse dia
+              </label>
+              <label className="flex items-center gap-2 text-sm">
+                <input type="radio" name="opcao" checked={opcao === 'cancelado'} onChange={() => setOpcao('cancelado')} />
+                Cancelado só nesse dia (libera a quadra)
+              </label>
+            </div>
+
+            {opcao === 'alterado' && (
+              <div className="space-y-3 mb-4 bg-night rounded-xl p-3">
+                <div className="grid grid-cols-2 gap-3">
+                  <label className="block">
+                    <span className="text-xs text-areia-muted block mb-1">Quadra</span>
+                    <select value={quadraId} onChange={(e) => setQuadraId(e.target.value)} className="bg-night-panel border border-night-line rounded-lg px-2 py-1.5 text-areia w-full text-sm">
+                      {quadras.map((q) => <option key={q.id} value={q.id}>{q.nome}</option>)}
+                    </select>
+                  </label>
+                  <label className="block">
+                    <span className="text-xs text-areia-muted block mb-1">Modalidade</span>
+                    <select value={modalidade} onChange={(e) => setModalidade(e.target.value)} className="bg-night-panel border border-night-line rounded-lg px-2 py-1.5 text-areia w-full text-sm">
+                      {modalidades.map((m) => <option key={m.modalidade} value={m.modalidade}>{NOMES_MODALIDADE[m.modalidade]}</option>)}
+                    </select>
+                  </label>
+                </div>
+                <div className="grid grid-cols-2 gap-3">
+                  <label className="block">
+                    <span className="text-xs text-areia-muted block mb-1">Início</span>
+                    <input type="time" value={horaInicio} onChange={(e) => setHoraInicio(e.target.value)} className="bg-night-panel border border-night-line rounded-lg px-2 py-1.5 text-areia w-full text-sm" />
+                  </label>
+                  <label className="block">
+                    <span className="text-xs text-areia-muted block mb-1">Fim</span>
+                    <input type="time" value={horaFim} onChange={(e) => setHoraFim(e.target.value)} className="bg-night-panel border border-night-line rounded-lg px-2 py-1.5 text-areia w-full text-sm" />
+                  </label>
+                </div>
+              </div>
+            )}
+
+            {erro && <p className="text-erro text-sm mb-3">{erro}</p>}
+
+            <div className="flex justify-between gap-3 pt-2 border-t border-night-line">
+              <button onClick={onFechar} className="text-areia-muted hover:text-areia px-3 py-2 text-sm">Fechar</button>
+              <button
+                onClick={salvar}
+                disabled={salvando}
+                className="bg-coral hover:bg-coral-hover disabled:opacity-30 text-night font-semibold px-6 py-2 rounded-full"
+              >
+                {salvando ? 'Salvando...' : 'Salvar'}
+              </button>
+            </div>
+          </>
+        )}
       </div>
     </div>
   );
