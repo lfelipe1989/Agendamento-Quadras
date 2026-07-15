@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useCallback } from 'react';
 import { supabase } from '@/lib/supabaseClient';
-import { buscarSlotsDoDia, buscarMensalistasEfetivosDoDia } from '@/lib/disponibilidade';
+import { buscarSlotsDoDia, buscarMensalistasEfetivosDoDia, buscarHorariosDisponiveis } from '@/lib/disponibilidade';
 
 const NOMES_MODALIDADE = {
   altinha: 'Altinha',
@@ -31,6 +31,7 @@ export default function Eventos({ quadras, modalidades }) {
   const [carregando, setCarregando] = useState(false);
   const [selecionados, setSelecionados] = useState(new Set());
   const [mostrarModal, setMostrarModal] = useState(false);
+  const [eventoEditando, setEventoEditando] = useState(null); // { item, quadra }
   const [mostrarCalendario, setMostrarCalendario] = useState(false);
 
   const hojeStr = dataParaString(new Date());
@@ -173,12 +174,19 @@ export default function Eventos({ quadras, modalidades }) {
                   const chave = chaveSlot(q.id, slot.hora_inicio);
                   const selecionado = selecionados.has(chave);
                   const cor = item ? (modalidades.find((m) => m.modalidade === item.modalidade)?.cor || '#8a8a8a') : null;
+                  const bloqueado = item && item.tipo !== 'evento';
 
                   return (
                     <button
                       key={q.id}
-                      disabled={!!item}
-                      onClick={() => alternarSelecao(q.id, slot.hora_inicio)}
+                      disabled={bloqueado}
+                      onClick={() => {
+                        if (item?.tipo === 'evento') {
+                          setEventoEditando({ item, quadra: q });
+                        } else if (!item) {
+                          alternarSelecao(q.id, slot.hora_inicio);
+                        }
+                      }}
                       style={
                         item
                           ? { backgroundColor: `${cor}26`, borderLeft: `3px solid ${cor}`, color: cor }
@@ -188,7 +196,7 @@ export default function Eventos({ quadras, modalidades }) {
                       }
                       className={`border-b border-night-line p-2 text-left text-xs min-h-[52px] transition-colors ${
                         !item && !selecionado ? 'hover:bg-night-line/40' : ''
-                      } ${item ? 'cursor-not-allowed' : ''}`}
+                      } ${item?.tipo === 'evento' ? 'hover:brightness-125' : ''} ${bloqueado ? 'cursor-not-allowed' : ''}`}
                     >
                       {item ? (
                         <>
@@ -241,6 +249,322 @@ export default function Eventos({ quadras, modalidades }) {
           onCriado={() => { setMostrarModal(false); setSelecionados(new Set()); carregar(); }}
         />
       )}
+
+      {eventoEditando && (
+        <EditarEventoModal
+          item={eventoEditando.item}
+          quadra={eventoEditando.quadra}
+          data={data}
+          quadras={quadras}
+          modalidades={modalidades}
+          onFechar={() => setEventoEditando(null)}
+          onAtualizado={() => { setEventoEditando(null); carregar(); }}
+        />
+      )}
+    </div>
+  );
+}
+
+function EditarEventoModal({ item, quadra, data, quadras, modalidades, onFechar, onAtualizado }) {
+  const [modo, setModo] = useState('horario'); // 'horario' | 'evento'
+  const [carregando, setCarregando] = useState(true);
+  const [erro, setErro] = useState(null);
+  const [salvando, setSalvando] = useState(false);
+
+  // Edição só desse horário
+  const [horaData, setHoraData] = useState(data);
+  const [horaQuadraId, setHoraQuadraId] = useState(quadra.id);
+  const [horarios, setHorarios] = useState([]);
+  const [horarioEscolhido, setHorarioEscolhido] = useState({ hora_inicio: item.hora_inicio.slice(0, 5), hora_fim: item.hora_fim.slice(0, 5) });
+  const [horaModalidade, setHoraModalidade] = useState(item.modalidade || '');
+
+  // Edição do evento inteiro
+  const [nomeResponsavel, setNomeResponsavel] = useState('');
+  const [telefone, setTelefone] = useState('');
+  const [email, setEmail] = useState('');
+  const [cpf, setCpf] = useState('');
+  const [eventoModalidade, setEventoModalidade] = useState('');
+  const [observacao, setObservacao] = useState('');
+  const [novaData, setNovaData] = useState(data);
+  const [slotsDoEvento, setSlotsDoEvento] = useState([]);
+
+  useEffect(() => {
+    (async () => {
+      setCarregando(true);
+      const { data: evento } = await supabase.from('eventos').select('*').eq('id', item.evento_id).single();
+      if (evento) {
+        setNomeResponsavel(evento.nome_responsavel || '');
+        setTelefone(evento.telefone || '');
+        setEmail(evento.email || '');
+        setCpf(evento.cpf || '');
+        setEventoModalidade(evento.modalidade || '');
+        setObservacao(evento.observacao || '');
+      }
+      const { data: slots } = await supabase
+        .from('reservas')
+        .select('id, quadra_id, data, hora_inicio, hora_fim, quadras(nome)')
+        .eq('evento_id', item.evento_id)
+        .neq('status_reserva', 'cancelada')
+        .order('data')
+        .order('hora_inicio');
+      setSlotsDoEvento(slots || []);
+      setCarregando(false);
+    })();
+  }, [item.evento_id]);
+
+  useEffect(() => {
+    if (modo === 'horario' && horaQuadraId && horaData) {
+      buscarHorariosDisponiveis(horaQuadraId, horaData, item.id).then(setHorarios);
+    }
+  }, [modo, horaQuadraId, horaData, item.id]);
+
+  async function salvarHorario() {
+    setSalvando(true);
+    setErro(null);
+    try {
+      if (!horarioEscolhido) throw new Error('Escolha um horário.');
+      const { error } = await supabase
+        .from('reservas')
+        .update({
+          quadra_id: horaQuadraId,
+          data: horaData,
+          hora_inicio: horarioEscolhido.hora_inicio,
+          hora_fim: horarioEscolhido.hora_fim,
+          modalidade: horaModalidade || null,
+        })
+        .eq('id', item.id);
+      if (error) {
+        if (error.code === '23P01') throw new Error('Esse horário já está ocupado nessa quadra.');
+        throw error;
+      }
+      onAtualizado();
+    } catch (e) {
+      setErro(e.message || 'Erro ao salvar.');
+    } finally {
+      setSalvando(false);
+    }
+  }
+
+  async function cancelarSoEsseHorario() {
+    if (!confirm('Cancelar só esse horário? Os outros horários do evento continuam normais.')) return;
+    await supabase.from('reservas').update({ status_reserva: 'cancelada' }).eq('id', item.id);
+    onAtualizado();
+  }
+
+  async function salvarEvento() {
+    setSalvando(true);
+    setErro(null);
+    try {
+      const { error: erroEvento } = await supabase
+        .from('eventos')
+        .update({
+          nome_responsavel: nomeResponsavel,
+          telefone,
+          email: email || null,
+          cpf: cpf || null,
+          modalidade: eventoModalidade || null,
+          observacao: observacao || null,
+        })
+        .eq('id', item.evento_id);
+      if (erroEvento) throw erroEvento;
+
+      // Se a data foi alterada, move todos os horários do evento pra nova data
+      if (novaData !== slotsDoEvento[0]?.data) {
+        const falhas = [];
+        for (const slot of slotsDoEvento) {
+          const { error } = await supabase.from('reservas').update({ data: novaData }).eq('id', slot.id);
+          if (error) falhas.push(`${slot.quadras?.nome} ${slot.hora_inicio.slice(0, 5)}`);
+        }
+        if (falhas.length > 0) {
+          setErro(`Dados do evento salvos, mas alguns horários não puderam mudar de data (podem já estar ocupados no novo dia): ${falhas.join(', ')}`);
+          return;
+        }
+      }
+      onAtualizado();
+    } catch (e) {
+      setErro(e.message || 'Erro ao salvar.');
+    } finally {
+      setSalvando(false);
+    }
+  }
+
+  async function cancelarEventoInteiro() {
+    if (!confirm(`Cancelar o evento inteiro? Isso libera todos os ${slotsDoEvento.length} horário(s) vinculados a ele.`)) return;
+    await supabase.from('reservas').update({ status_reserva: 'cancelada' }).eq('evento_id', item.evento_id);
+    onAtualizado();
+  }
+
+  return (
+    <div className="fixed inset-0 bg-black/60 flex items-center justify-center p-4 z-50">
+      <div className="bg-night-panel border border-night-line rounded-2xl p-6 w-full max-w-lg max-h-[90vh] overflow-y-auto">
+        <h3 className="font-display text-xl tracking-wide mb-4">EDITAR EVENTO</h3>
+
+        {carregando ? (
+          <p className="text-areia-muted">Carregando...</p>
+        ) : (
+          <>
+            <div className="flex gap-2 mb-4">
+              <button
+                onClick={() => setModo('horario')}
+                className={`flex-1 text-sm font-semibold px-3 py-2 rounded-full ${modo === 'horario' ? 'bg-coral text-night' : 'bg-night text-areia-muted'}`}
+              >
+                Só esse horário
+              </button>
+              <button
+                onClick={() => setModo('evento')}
+                className={`flex-1 text-sm font-semibold px-3 py-2 rounded-full ${modo === 'evento' ? 'bg-coral text-night' : 'bg-night text-areia-muted'}`}
+              >
+                Evento inteiro ({slotsDoEvento.length} horários)
+              </button>
+            </div>
+
+            {modo === 'horario' && (
+              <>
+                <p className="text-areia-muted text-xs mb-4">
+                  Altera só esse horário específico ({quadra.nome}, {item.hora_inicio.slice(0, 5)}), sem mexer nos outros horários desse mesmo evento.
+                </p>
+                <div className="grid grid-cols-2 gap-3 mb-3">
+                  <label className="block">
+                    <span className="text-sm text-areia-muted block mb-1">Data</span>
+                    <input
+                      type="date"
+                      value={horaData}
+                      onChange={(e) => { setHoraData(e.target.value); setHorarioEscolhido(null); }}
+                      className="bg-night border border-night-line rounded-lg px-3 py-2 text-areia w-full"
+                    />
+                  </label>
+                  <label className="block">
+                    <span className="text-sm text-areia-muted block mb-1">Quadra</span>
+                    <select
+                      value={horaQuadraId}
+                      onChange={(e) => { setHoraQuadraId(e.target.value); setHorarioEscolhido(null); }}
+                      className="bg-night border border-night-line rounded-lg px-3 py-2 text-areia w-full"
+                    >
+                      {quadras.map((q) => <option key={q.id} value={q.id}>{q.nome}</option>)}
+                    </select>
+                  </label>
+                </div>
+
+                <label className="block mb-3">
+                  <span className="text-sm text-areia-muted block mb-1">Horário</span>
+                  <div className="grid grid-cols-4 gap-2">
+                    {horarios.map((h) => (
+                      <button
+                        key={h.hora_inicio}
+                        disabled={!h.disponivel}
+                        onClick={() => setHorarioEscolhido(h)}
+                        className={`py-2 rounded-lg text-xs border ${
+                          !h.disponivel ? 'border-night-line text-areia-muted/40 line-through cursor-not-allowed'
+                          : horarioEscolhido?.hora_inicio === h.hora_inicio ? 'border-coral text-coral' : 'border-night-line'
+                        }`}
+                      >
+                        {h.hora_inicio}
+                      </button>
+                    ))}
+                  </div>
+                </label>
+
+                <label className="block mb-4">
+                  <span className="text-sm text-areia-muted block mb-1">Modalidade (opcional)</span>
+                  <select value={horaModalidade} onChange={(e) => setHoraModalidade(e.target.value)} className="bg-night border border-night-line rounded-lg px-3 py-2 text-areia w-full">
+                    <option value="">Não especificar</option>
+                    {modalidades.map((m) => <option key={m.modalidade} value={m.modalidade}>{NOMES_MODALIDADE[m.modalidade]}</option>)}
+                  </select>
+                </label>
+
+                {erro && <p className="text-erro text-sm mb-3">{erro}</p>}
+
+                <div className="flex items-center justify-between gap-3 pt-2 border-t border-night-line">
+                  <button onClick={cancelarSoEsseHorario} className="text-erro hover:opacity-80 text-sm px-2 py-2">
+                    Cancelar só esse horário
+                  </button>
+                  <div className="flex gap-3">
+                    <button onClick={onFechar} className="text-areia-muted hover:text-areia px-3 py-2 text-sm">Fechar</button>
+                    <button
+                      onClick={salvarHorario}
+                      disabled={!horarioEscolhido || salvando}
+                      className="bg-coral hover:bg-coral-hover disabled:opacity-30 text-night font-semibold px-6 py-2 rounded-full"
+                    >
+                      {salvando ? 'Salvando...' : 'Salvar esse horário'}
+                    </button>
+                  </div>
+                </div>
+              </>
+            )}
+
+            {modo === 'evento' && (
+              <>
+                <p className="text-areia-muted text-xs mb-4">
+                  Isso afeta todos os {slotsDoEvento.length} horário(s) desse evento: {slotsDoEvento.map((s) => `${s.quadras?.nome} ${s.hora_inicio.slice(0, 5)}`).join(', ')}
+                </p>
+
+                <div className="grid grid-cols-2 gap-3 mb-3">
+                  <label className="block">
+                    <span className="text-sm text-areia-muted block mb-1">Telefone do responsável</span>
+                    <input value={telefone} onChange={(e) => setTelefone(e.target.value)} className="bg-night border border-night-line rounded-lg px-3 py-2 text-areia w-full" />
+                  </label>
+                  <label className="block">
+                    <span className="text-sm text-areia-muted block mb-1">Nome do responsável</span>
+                    <input value={nomeResponsavel} onChange={(e) => setNomeResponsavel(e.target.value)} className="bg-night border border-night-line rounded-lg px-3 py-2 text-areia w-full" />
+                  </label>
+                </div>
+
+                <div className="grid grid-cols-2 gap-3 mb-3">
+                  <label className="block">
+                    <span className="text-sm text-areia-muted block mb-1">E-mail (opcional)</span>
+                    <input value={email} onChange={(e) => setEmail(e.target.value)} className="bg-night border border-night-line rounded-lg px-3 py-2 text-areia w-full" />
+                  </label>
+                  <label className="block">
+                    <span className="text-sm text-areia-muted block mb-1">CPF (opcional)</span>
+                    <input value={cpf} onChange={(e) => setCpf(e.target.value)} className="bg-night border border-night-line rounded-lg px-3 py-2 text-areia w-full" />
+                  </label>
+                </div>
+
+                <label className="block mb-3">
+                  <span className="text-sm text-areia-muted block mb-1">Modalidade (opcional)</span>
+                  <select value={eventoModalidade} onChange={(e) => setEventoModalidade(e.target.value)} className="bg-night border border-night-line rounded-lg px-3 py-2 text-areia w-full">
+                    <option value="">Não especificar</option>
+                    {modalidades.map((m) => <option key={m.modalidade} value={m.modalidade}>{NOMES_MODALIDADE[m.modalidade]}</option>)}
+                  </select>
+                </label>
+
+                <label className="block mb-3">
+                  <span className="text-sm text-areia-muted block mb-1">Observação</span>
+                  <textarea
+                    value={observacao}
+                    onChange={(e) => setObservacao(e.target.value)}
+                    rows={3}
+                    className="bg-night border border-night-line rounded-lg px-3 py-2 text-areia w-full resize-none"
+                  />
+                </label>
+
+                <label className="block mb-4">
+                  <span className="text-sm text-areia-muted block mb-1">Mudar data de todos os horários do evento</span>
+                  <input type="date" value={novaData} onChange={(e) => setNovaData(e.target.value)} className="bg-night border border-night-line rounded-lg px-3 py-2 text-areia w-full" />
+                </label>
+
+                {erro && <p className="text-erro text-sm mb-3">{erro}</p>}
+
+                <div className="flex items-center justify-between gap-3 pt-2 border-t border-night-line">
+                  <button onClick={cancelarEventoInteiro} className="text-erro hover:opacity-80 text-sm px-2 py-2">
+                    Cancelar evento inteiro
+                  </button>
+                  <div className="flex gap-3">
+                    <button onClick={onFechar} className="text-areia-muted hover:text-areia px-3 py-2 text-sm">Fechar</button>
+                    <button
+                      onClick={salvarEvento}
+                      disabled={salvando}
+                      className="bg-coral hover:bg-coral-hover disabled:opacity-30 text-night font-semibold px-6 py-2 rounded-full"
+                    >
+                      {salvando ? 'Salvando...' : 'Salvar evento'}
+                    </button>
+                  </div>
+                </div>
+              </>
+            )}
+          </>
+        )}
+      </div>
     </div>
   );
 }

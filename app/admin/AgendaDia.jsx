@@ -224,7 +224,7 @@ export default function AgendaDia({ quadras, modalidades, horaInicioNoturno }) {
         />
       )}
 
-      {detalheItem && (detalheItem.item.tipo === 'avulsa' || detalheItem.item.tipo === 'evento') && (
+      {detalheItem && detalheItem.item.tipo === 'avulsa' && (
         <EditarReservaModal
           reservaId={detalheItem.item.id}
           quadras={quadras}
@@ -232,6 +232,14 @@ export default function AgendaDia({ quadras, modalidades, horaInicioNoturno }) {
           horaInicioNoturno={horaInicioNoturno}
           onFechar={() => setDetalheItem(null)}
           onAtualizado={() => { setDetalheItem(null); carregar(); }}
+        />
+      )}
+
+      {detalheItem && detalheItem.item.tipo === 'evento' && (
+        <InfoEventoModal
+          item={detalheItem.item}
+          quadra={detalheItem.quadra}
+          onFechar={() => setDetalheItem(null)}
         />
       )}
 
@@ -245,6 +253,27 @@ export default function AgendaDia({ quadras, modalidades, horaInicioNoturno }) {
           onAtualizado={() => { setDetalheItem(null); carregar(); }}
         />
       )}
+    </div>
+  );
+}
+
+function InfoEventoModal({ item, quadra, onFechar }) {
+  return (
+    <div className="fixed inset-0 bg-black/60 flex items-center justify-center p-4 z-50">
+      <div className="bg-night-panel border border-night-line rounded-2xl p-6 w-full max-w-sm">
+        <h3 className="font-display text-xl tracking-wide mb-1">{quadra.nome}</h3>
+        <p className="text-areia-muted text-sm mb-4">
+          {item.hora_inicio.slice(0, 5)}–{item.hora_fim.slice(0, 5)}
+        </p>
+        <p className="font-semibold mb-1">{item.eventos?.nome_responsavel || 'Evento'}</p>
+        {item.eventos?.observacao && <p className="text-areia-muted text-sm mb-4">{item.eventos.observacao}</p>}
+        <p className="text-volei text-sm mb-4">
+          Esse horário faz parte de um evento. Pra editar, cancelar ou trocar de data, use a aba <strong>Eventos</strong> e clique nesse mesmo horário lá.
+        </p>
+        <button onClick={onFechar} className="w-full text-areia-muted hover:text-areia text-sm py-2">
+          Fechar
+        </button>
+      </div>
     </div>
   );
 }
