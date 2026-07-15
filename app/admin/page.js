@@ -13,17 +13,23 @@ export default function AdminPage() {
   const [aba, setAba] = useState('agenda');
   const [quadras, setQuadras] = useState([]);
   const [modalidades, setModalidades] = useState([]);
+  const [horaInicioNoturno, setHoraInicioNoturno] = useState('18:00');
 
+  // Restaura sessão do balcão (se já tiver feito login nessa aba do navegador)
   useEffect(() => {
     const salvo = sessionStorage.getItem('staff');
     if (salvo) setStaff(JSON.parse(salvo));
     setCarregandoSessao(false);
   }, []);
 
+  // Carrega dados de referência assim que loga
   useEffect(() => {
     if (!staff) return;
     supabase.from('quadras').select('*').eq('ativa', true).order('ordem').then(({ data }) => setQuadras(data || []));
     supabase.from('config_modalidade').select('*').then(({ data }) => setModalidades(data || []));
+    supabase.from('configuracao').select('hora_inicio_noturno').eq('id', 1).single().then(({ data }) => {
+      if (data?.hora_inicio_noturno) setHoraInicioNoturno(data.hora_inicio_noturno.slice(0, 5));
+    });
   }, [staff]);
 
   function fazerLogout() {
@@ -56,7 +62,7 @@ export default function AdminPage() {
           <BotaoAba ativo={aba === 'horarios'} onClick={() => setAba('horarios')}>Horários</BotaoAba>
         </div>
 
-        {aba === 'agenda' && <AgendaDia quadras={quadras} modalidades={modalidades} />}
+        {aba === 'agenda' && <AgendaDia quadras={quadras} modalidades={modalidades} horaInicioNoturno={horaInicioNoturno} />}
         {aba === 'mensalistas' && <Mensalistas quadras={quadras} modalidades={modalidades} />}
         {aba === 'horarios' && <Horarios />}
       </div>
