@@ -13,8 +13,17 @@ const NOMES_MODALIDADE = {
 
 const DIAS_SEMANA = ['Domingo', 'Segunda', 'Terça', 'Quarta', 'Quinta', 'Sexta', 'Sábado'];
 
+// Formata uma data no fuso local (evita o bug de toISOString() virar o dia
+// seguinte à noite, já que ela converte pra UTC antes de formatar)
+function dataParaString(d) {
+  const ano = d.getFullYear();
+  const mes = String(d.getMonth() + 1).padStart(2, '0');
+  const dia = String(d.getDate()).padStart(2, '0');
+  return `${ano}-${mes}-${dia}`;
+}
+
 export default function AgendaDia({ quadras, modalidades }) {
-  const [data, setData] = useState(new Date().toISOString().split('T')[0]);
+  const [data, setData] = useState(dataParaString(new Date()));
   const [slots, setSlots] = useState([]);
   const [itensPorQuadra, setItensPorQuadra] = useState({});
   const [carregando, setCarregando] = useState(false);
@@ -77,13 +86,13 @@ export default function AgendaDia({ quadras, modalidades }) {
   }
 
   const [mostrarCalendario, setMostrarCalendario] = useState(false);
-  const hojeStr = new Date().toISOString().split('T')[0];
+  const hojeStr = dataParaString(new Date());
   const ehHoje = data === hojeStr;
 
   function mudarDia(delta) {
     const d = new Date(`${data}T00:00:00`);
     d.setDate(d.getDate() + delta);
-    setData(d.toISOString().split('T')[0]);
+    setData(dataParaString(d));
   }
 
   function formatarDataExtenso(d) {
