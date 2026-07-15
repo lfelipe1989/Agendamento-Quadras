@@ -16,7 +16,7 @@ const ETAPAS = ['Data', 'Horário', 'Quadra', 'Modalidade', 'Seus dados', 'Pagam
 export default function BookingFlow({ quadras, modalidades }) {
   const [etapa, setEtapa] = useState(0);
   const [data, setData] = useState('');
-  const [disponibilidade, setDisponibilidade] = useState({}); // { quadraId: [slots] }
+  const [disponibilidade, setDisponibilidade] = useState({});
   const [carregando, setCarregando] = useState(false);
   const [horarioEscolhido, setHorarioEscolhido] = useState(null);
   const [quadraId, setQuadraId] = useState(null);
@@ -31,7 +31,6 @@ export default function BookingFlow({ quadras, modalidades }) {
 
   const hoje = new Date().toISOString().split('T')[0];
 
-  // Busca disponibilidade das 3 quadras assim que a data é escolhida
   useEffect(() => {
     if (data) {
       setCarregando(true);
@@ -43,20 +42,16 @@ export default function BookingFlow({ quadras, modalidades }) {
     }
   }, [data]);
 
-  // Horários únicos onde PELO MENOS UMA quadra está livre
-  const horariosDisponiveis = (() => {
-    const todosSlots = Object.values(disponibilidade)[0] || [];
-    return todosSlots.map((slot) => {
-      const algumaQuadraLivre = quadras.some((q) =>
-        disponibilidade[q.id]?.some(
-          (s) => s.hora_inicio === slot.hora_inicio && s.disponivel
-        )
-      );
-      return { ...slot, disponivel: algumaQuadraLivre };
-    });
-  })();
+  const slotsBase = Object.values(disponibilidade)[0] || [];
+  const diaFechado = !carregando && data && slotsBase.length === 0;
 
-  // Quadras livres pro horário já escolhido
+  const horariosDisponiveis = slotsBase.map((slot) => {
+    const algumaQuadraLivre = quadras.some((q) =>
+      disponibilidade[q.id]?.some((s) => s.hora_inicio === slot.hora_inicio && s.disponivel)
+    );
+    return { ...slot, disponivel: algumaQuadraLivre };
+  });
+
   const quadrasDisponiveis = horarioEscolhido
     ? quadras.filter((q) =>
         disponibilidade[q.id]?.some(
@@ -103,7 +98,7 @@ export default function BookingFlow({ quadras, modalidades }) {
           hora_fim: horarioEscolhido.hora_fim,
           valor,
           origem: 'link',
-          forma_pagamento: formaPagamento,
+          forma_pagamento: formaPagamento === 'asaas_online' ? 'asaas_online' : 'local',
           status_pagamento: 'pendente',
           status_reserva: statusReserva,
         })
@@ -165,12 +160,15 @@ export default function BookingFlow({ quadras, modalidades }) {
               type="date"
               min={hoje}
               value={data}
-              onChange={(e) => { setData(e.target.value); }}
+              onChange={(e) => setData(e.target.value)}
               className="bg-night border border-night-line rounded-lg px-4 py-3 text-areia w-full mb-4"
             />
+            {diaFechado && (
+              <p className="text-aviso text-sm mb-4">Fechado nesse dia. Escolha outra data.</p>
+            )}
             <div className="flex justify-end">
               <button
-                disabled={!data || carregando}
+                disabled={!data || carregando || diaFechado}
                 onClick={() => setEtapa(1)}
                 className="bg-coral hover:bg-coral-hover disabled:opacity-30 disabled:cursor-not-allowed text-night font-semibold px-6 py-2 rounded-full transition-colors"
               >
