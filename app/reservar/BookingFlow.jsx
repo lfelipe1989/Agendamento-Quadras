@@ -117,17 +117,23 @@ export default function BookingFlow({ quadras, modalidades, horaInicioNoturno })
       }
 
       if (formaPagamento === 'asaas_online') {
-        const resp = await fetch('/api/asaas/checkout', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ reservaId: reserva.id, clienteId, valor, nome, email, telefone }),
-        });
-        const checkout = await resp.json();
-        if (checkout.checkoutUrl) {
-          window.location.href = checkout.checkoutUrl;
-          return;
+        try {
+          const resp = await fetch('/api/asaas/checkout', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ reservaId: reserva.id, clienteId, valor, nome, email, telefone }),
+          });
+          const checkout = await resp.json();
+          if (checkout.checkoutUrl) {
+            window.location.href = checkout.checkoutUrl;
+            return;
+          }
+          throw new Error('Não foi possível iniciar o pagamento online. Tente pagar no local.');
+        } catch (erroCheckout) {
+          // Cobrança não foi criada por qualquer motivo — cancela a reserva pra não travar o horário
+          await supabase.from('reservas').update({ status_reserva: 'cancelada' }).eq('id', reserva.id);
+          throw erroCheckout;
         }
-        throw new Error('Não foi possível iniciar o pagamento online. Tente pagar no local.');
       }
 
       setReservaConfirmada(reserva.id);
