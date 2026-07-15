@@ -5,6 +5,7 @@ import { supabase } from '@/lib/supabaseClient';
 import { validarCodigoAcesso } from '@/lib/staffAuth';
 import AgendaDia from './AgendaDia';
 import Mensalistas from './Mensalistas';
+import Horarios from './Horarios';
 
 export default function AdminPage() {
   const [staff, setStaff] = useState(null);
@@ -13,14 +14,12 @@ export default function AdminPage() {
   const [quadras, setQuadras] = useState([]);
   const [modalidades, setModalidades] = useState([]);
 
-  // Restaura sessão do balcão (se já tiver feito login nessa aba do navegador)
   useEffect(() => {
     const salvo = sessionStorage.getItem('staff');
     if (salvo) setStaff(JSON.parse(salvo));
     setCarregandoSessao(false);
   }, []);
 
-  // Carrega dados de referência assim que loga
   useEffect(() => {
     if (!staff) return;
     supabase.from('quadras').select('*').eq('ativa', true).order('ordem').then(({ data }) => setQuadras(data || []));
@@ -54,10 +53,12 @@ export default function AdminPage() {
         <div className="flex gap-2 mb-6">
           <BotaoAba ativo={aba === 'agenda'} onClick={() => setAba('agenda')}>Agenda do dia</BotaoAba>
           <BotaoAba ativo={aba === 'mensalistas'} onClick={() => setAba('mensalistas')}>Mensalistas</BotaoAba>
+          <BotaoAba ativo={aba === 'horarios'} onClick={() => setAba('horarios')}>Horários</BotaoAba>
         </div>
 
         {aba === 'agenda' && <AgendaDia quadras={quadras} modalidades={modalidades} />}
         {aba === 'mensalistas' && <Mensalistas quadras={quadras} modalidades={modalidades} />}
+        {aba === 'horarios' && <Horarios />}
       </div>
     </main>
   );
