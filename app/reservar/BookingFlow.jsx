@@ -29,7 +29,8 @@ export default function BookingFlow({ quadras, modalidades }) {
   const [erro, setErro] = useState(null);
   const [reservaConfirmada, setReservaConfirmada] = useState(null);
 
-  const hoje = new Date().toISOString().split('T')[0];
+  const agora = new Date();
+  const hoje = `${agora.getFullYear()}-${String(agora.getMonth() + 1).padStart(2, '0')}-${String(agora.getDate()).padStart(2, '0')}`;
 
   useEffect(() => {
     if (data) {
