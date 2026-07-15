@@ -77,20 +77,6 @@ export default function AgendaDia({ quadras, modalidades, horaInicioNoturno }) {
 
   useEffect(() => { carregar(); }, [carregar]);
 
-  async function alternarPagamento(item) {
-    const novoStatus = item.status_pagamento === 'pago' ? 'pendente' : 'pago';
-    await supabase.from('reservas').update({ status_pagamento: novoStatus }).eq('id', item.id);
-    setDetalheItem(null);
-    carregar();
-  }
-
-  async function cancelarReserva(item) {
-    if (!confirm('Cancelar essa reserva?')) return;
-    await supabase.from('reservas').update({ status_reserva: 'cancelada' }).eq('id', item.id);
-    setDetalheItem(null);
-    carregar();
-  }
-
   const [mostrarCalendario, setMostrarCalendario] = useState(false);
   const hojeStr = dataParaString(new Date());
   const ehHoje = data === hojeStr;
@@ -225,21 +211,30 @@ export default function AgendaDia({ quadras, modalidades, horaInicioNoturno }) {
         />
       )}
 
-      {detalheItem && (
-        <DetalheItemModal
+      {detalheItem && detalheItem.item.tipo === 'avulsa' && (
+        <EditarReservaModal
+          reservaId={detalheItem.item.id}
+          quadras={quadras}
+          modalidades={modalidades}
+          horaInicioNoturno={horaInicioNoturno}
+          onFechar={() => setDetalheItem(null)}
+          onAtualizado={() => { setDetalheItem(null); carregar(); }}
+        />
+      )}
+
+      {detalheItem && detalheItem.item.tipo === 'mensalista' && (
+        <InfoMensalistaModal
           item={detalheItem.item}
           quadra={detalheItem.quadra}
           modalidades={modalidades}
           onFechar={() => setDetalheItem(null)}
-          onAlternarPagamento={() => alternarPagamento(detalheItem.item)}
-          onCancelar={() => cancelarReserva(detalheItem.item)}
         />
       )}
     </div>
   );
 }
 
-function DetalheItemModal({ item, quadra, modalidades, onFechar, onAlternarPagamento, onCancelar }) {
+function InfoMensalistaModal({ item, quadra, modalidades, onFechar }) {
   const cor = modalidades.find((m) => m.modalidade === item.modalidade)?.cor;
   return (
     <div className="fixed inset-0 bg-black/60 flex items-center justify-center p-4 z-50">
@@ -251,28 +246,227 @@ function DetalheItemModal({ item, quadra, modalidades, onFechar, onAlternarPagam
         </p>
         <p className="font-semibold mb-1">{item.clientes?.nome}</p>
         <p className="text-areia-muted text-sm mb-4">{item.clientes?.telefone}</p>
-
-        {item.tipo === 'mensalista' ? (
-          <p className="text-volei text-sm mb-4">Horário fixo de mensalista — gerencie pagamento na aba Mensalistas.</p>
-        ) : (
-          <>
-            <button
-              onClick={onAlternarPagamento}
-              className={`w-full text-sm px-3 py-2 rounded-lg mb-3 ${
-                item.status_pagamento === 'pago' ? 'bg-sucesso/20 text-sucesso' : 'bg-aviso/20 text-aviso'
-              }`}
-            >
-              {item.status_pagamento === 'pago' ? '✓ Pago' : 'Pendente'} · R$ {Number(item.valor).toFixed(2)} — clique pra alternar
-            </button>
-            <button onClick={onCancelar} className="w-full text-sm px-3 py-2 rounded-lg text-erro hover:bg-erro/10 mb-3">
-              Cancelar reserva
-            </button>
-          </>
-        )}
-
+        <p className="text-volei text-sm mb-4">
+          Esse é um horário fixo de mensalista. Pra editar dia, horário, modalidade ou valor, use a aba <strong>Mensalistas</strong> e clique no nome da pessoa.
+        </p>
         <button onClick={onFechar} className="w-full text-areia-muted hover:text-areia text-sm py-2">
           Fechar
         </button>
+      </div>
+    </div>
+  );
+}
+
+function EditarReservaModal({ reservaId, quadras, modalidades, horaInicioNoturno, onFechar, onAtualizado }) {
+  const [carregando, setCarregando] = useState(true);
+  const [clienteId, setClienteId] = useState(null);
+  const [clienteNome, setClienteNome] = useState('');
+  const [clienteTelefone, setClienteTelefone] = useState('');
+  const [data, setData] = useState('');
+  const [quadraId, setQuadraId] = useState('');
+  const [modalidade, setModalidade] = useState('');
+  const [horarios, setHorarios] = useState([]);
+  const [horarioEscolhido, setHorarioEscolhido] = useState(null);
+  const [valor, setValor] = useState('');
+  const [formaPagamento, setFormaPagamento] = useState('dinheiro');
+  const [statusPagamento, setStatusPagamento] = useState('pendente');
+  const [carregandoHorarios, setCarregandoHorarios] = useState(false);
+  const [salvando, setSalvando] = useState(false);
+  const [erro, setErro] = useState(null);
+
+  useEffect(() => {
+    (async () => {
+      setCarregando(true);
+      const { data: r } = await supabase
+        .from('reservas')
+        .select('*, clientes(nome, telefone)')
+        .eq('id', reservaId)
+        .single();
+      if (r) {
+        setClienteId(r.cliente_id);
+        setClienteNome(r.clientes?.nome || '');
+        setClienteTelefone(r.clientes?.telefone || '');
+        setData(r.data);
+        setQuadraId(r.quadra_id);
+        setModalidade(r.modalidade);
+        setHorarioEscolhido({ hora_inicio: r.hora_inicio.slice(0, 5), hora_fim: r.hora_fim.slice(0, 5) });
+        setValor(r.valor);
+        setFormaPagamento(r.forma_pagamento || 'dinheiro');
+        setStatusPagamento(r.status_pagamento);
+      }
+      setCarregando(false);
+    })();
+  }, [reservaId]);
+
+  // Recalcula os horários disponíveis sempre que quadra ou data mudam,
+  // excluindo a própria reserva do cálculo de conflito (senão ela bloquearia a si mesma)
+  useEffect(() => {
+    if (quadraId && data) {
+      setCarregandoHorarios(true);
+      buscarHorariosDisponiveis(quadraId, data, reservaId)
+        .then(setHorarios)
+        .finally(() => setCarregandoHorarios(false));
+    }
+  }, [quadraId, data, reservaId]);
+
+  async function salvar() {
+    setSalvando(true);
+    setErro(null);
+    try {
+      if (!horarioEscolhido) throw new Error('Escolha um horário.');
+
+      const { error } = await supabase
+        .from('reservas')
+        .update({
+          quadra_id: quadraId,
+          modalidade,
+          data,
+          hora_inicio: horarioEscolhido.hora_inicio,
+          hora_fim: horarioEscolhido.hora_fim,
+          valor,
+          forma_pagamento: formaPagamento,
+          status_pagamento: statusPagamento,
+        })
+        .eq('id', reservaId);
+
+      if (error) {
+        if (error.code === '23P01') throw new Error('Esse horário já está ocupado nessa quadra.');
+        throw error;
+      }
+
+      if (clienteId) {
+        await supabase.from('clientes').update({ nome: clienteNome, telefone: clienteTelefone }).eq('id', clienteId);
+      }
+
+      onAtualizado();
+    } catch (e) {
+      setErro(e.message || 'Erro ao salvar.');
+    } finally {
+      setSalvando(false);
+    }
+  }
+
+  async function cancelar() {
+    if (!confirm('Cancelar essa reserva?')) return;
+    await supabase.from('reservas').update({ status_reserva: 'cancelada' }).eq('id', reservaId);
+    onAtualizado();
+  }
+
+  return (
+    <div className="fixed inset-0 bg-black/60 flex items-center justify-center p-4 z-50">
+      <div className="bg-night-panel border border-night-line rounded-2xl p-6 w-full max-w-md max-h-[90vh] overflow-y-auto">
+        <h3 className="font-display text-xl tracking-wide mb-4">EDITAR RESERVA</h3>
+
+        {carregando ? (
+          <p className="text-areia-muted">Carregando...</p>
+        ) : (
+          <>
+            <div className="grid grid-cols-2 gap-3 mb-3">
+              <label className="block">
+                <span className="text-sm text-areia-muted block mb-1">Nome</span>
+                <input value={clienteNome} onChange={(e) => setClienteNome(e.target.value)} className="bg-night border border-night-line rounded-lg px-3 py-2 text-areia w-full" />
+              </label>
+              <label className="block">
+                <span className="text-sm text-areia-muted block mb-1">Telefone</span>
+                <input value={clienteTelefone} onChange={(e) => setClienteTelefone(e.target.value)} className="bg-night border border-night-line rounded-lg px-3 py-2 text-areia w-full" />
+              </label>
+            </div>
+
+            <div className="grid grid-cols-2 gap-3 mb-3">
+              <label className="block">
+                <span className="text-sm text-areia-muted block mb-1">Data</span>
+                <input
+                  type="date"
+                  value={data}
+                  onChange={(e) => { setData(e.target.value); setHorarioEscolhido(null); }}
+                  className="bg-night border border-night-line rounded-lg px-3 py-2 text-areia w-full"
+                />
+              </label>
+              <label className="block">
+                <span className="text-sm text-areia-muted block mb-1">Quadra</span>
+                <select
+                  value={quadraId}
+                  onChange={(e) => { setQuadraId(e.target.value); setHorarioEscolhido(null); }}
+                  className="bg-night border border-night-line rounded-lg px-3 py-2 text-areia w-full"
+                >
+                  {quadras.map((q) => <option key={q.id} value={q.id}>{q.nome}</option>)}
+                </select>
+              </label>
+            </div>
+
+            <label className="block mb-3">
+              <span className="text-sm text-areia-muted block mb-1">Horário</span>
+              {carregandoHorarios ? (
+                <p className="text-areia-muted text-sm">Carregando...</p>
+              ) : (
+                <div className="grid grid-cols-4 gap-2">
+                  {horarios.map((h) => (
+                    <button
+                      key={h.hora_inicio}
+                      disabled={!h.disponivel}
+                      onClick={() => setHorarioEscolhido(h)}
+                      className={`py-2 rounded-lg text-xs border ${
+                        !h.disponivel ? 'border-night-line text-areia-muted/40 line-through cursor-not-allowed'
+                        : horarioEscolhido?.hora_inicio === h.hora_inicio ? 'border-coral text-coral' : 'border-night-line'
+                      }`}
+                    >
+                      {h.hora_inicio}
+                    </button>
+                  ))}
+                </div>
+              )}
+            </label>
+
+            <label className="block mb-3">
+              <span className="text-sm text-areia-muted block mb-1">Modalidade</span>
+              <select value={modalidade} onChange={(e) => setModalidade(e.target.value)} className="bg-night border border-night-line rounded-lg px-3 py-2 text-areia w-full">
+                {modalidades.map((m) => (
+                  <option key={m.modalidade} value={m.modalidade}>{NOMES_MODALIDADE[m.modalidade]}</option>
+                ))}
+              </select>
+            </label>
+
+            <div className="grid grid-cols-2 gap-3 mb-3">
+              <label className="block">
+                <span className="text-sm text-areia-muted block mb-1">Valor (R$)</span>
+                <input type="number" step="0.01" value={valor} onChange={(e) => setValor(e.target.value)} className="bg-night border border-night-line rounded-lg px-3 py-2 text-areia w-full" />
+              </label>
+              <label className="block">
+                <span className="text-sm text-areia-muted block mb-1">Forma de pagamento</span>
+                <select value={formaPagamento} onChange={(e) => setFormaPagamento(e.target.value)} className="bg-night border border-night-line rounded-lg px-3 py-2 text-areia w-full">
+                  <option value="dinheiro">Dinheiro</option>
+                  <option value="pix">Pix</option>
+                  <option value="cartao">Cartão</option>
+                  <option value="asaas_online">Asaas (online)</option>
+                  <option value="local">A combinar no local</option>
+                </select>
+              </label>
+            </div>
+
+            <label className="flex items-center gap-2 mb-4">
+              <input type="checkbox" checked={statusPagamento === 'pago'} onChange={(e) => setStatusPagamento(e.target.checked ? 'pago' : 'pendente')} />
+              <span className="text-sm">Pago</span>
+            </label>
+
+            {erro && <p className="text-erro text-sm mb-3">{erro}</p>}
+
+            <div className="flex items-center justify-between gap-3 pt-2 border-t border-night-line">
+              <button onClick={cancelar} className="text-erro hover:opacity-80 text-sm px-2 py-2">
+                Cancelar reserva
+              </button>
+              <div className="flex gap-3">
+                <button onClick={onFechar} className="text-areia-muted hover:text-areia px-3 py-2 text-sm">Fechar</button>
+                <button
+                  onClick={salvar}
+                  disabled={!horarioEscolhido || salvando}
+                  className="bg-coral hover:bg-coral-hover disabled:opacity-30 text-night font-semibold px-6 py-2 rounded-full"
+                >
+                  {salvando ? 'Salvando...' : 'Salvar alterações'}
+                </button>
+              </div>
+            </div>
+          </>
+        )}
       </div>
     </div>
   );
