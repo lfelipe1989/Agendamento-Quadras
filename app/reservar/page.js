@@ -42,10 +42,6 @@ export default async function ReservarPage() {
             Nenhuma quadra encontrada — a conexão funcionou, mas a tabela retornou vazia.
           </div>
         )}
-        <div className="bg-night-panel border border-night-line rounded-xl p-4 mb-6 text-xs">
-          <p className="font-semibold mb-1">[DEBUG temporário] modalidades recebidas:</p>
-          <pre className="whitespace-pre-wrap break-words">{JSON.stringify(modalidades, null, 2)}</pre>
-        </div>
         <BookingFlow
           quadras={quadras || []}
           modalidades={modalidades || []}
