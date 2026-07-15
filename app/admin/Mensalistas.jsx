@@ -181,6 +181,8 @@ export default function Mensalistas({ quadras, modalidades }) {
 function EditarClienteModal({ clienteId, quadras, modalidades, onFechar, onAtualizado }) {
   const [nome, setNome] = useState('');
   const [telefone, setTelefone] = useState('');
+  const [email, setEmail] = useState('');
+  const [cpf, setCpf] = useState('');
   const [slots, setSlots] = useState([]);
   const [carregando, setCarregando] = useState(true);
   const [salvandoCliente, setSalvandoCliente] = useState(false);
@@ -190,7 +192,12 @@ function EditarClienteModal({ clienteId, quadras, modalidades, onFechar, onAtual
   const carregar = useCallback(async () => {
     setCarregando(true);
     const { data: cliente } = await supabase.from('clientes').select('*').eq('id', clienteId).single();
-    if (cliente) { setNome(cliente.nome); setTelefone(cliente.telefone); }
+    if (cliente) {
+      setNome(cliente.nome);
+      setTelefone(cliente.telefone);
+      setEmail(cliente.email || '');
+      setCpf(cliente.cpf || '');
+    }
 
     const { data: lista } = await supabase
       .from('mensalistas')
@@ -207,7 +214,10 @@ function EditarClienteModal({ clienteId, quadras, modalidades, onFechar, onAtual
   async function salvarCliente() {
     setSalvandoCliente(true);
     setErro(null);
-    const { error } = await supabase.from('clientes').update({ nome, telefone }).eq('id', clienteId);
+    const { error } = await supabase
+      .from('clientes')
+      .update({ nome, telefone, email: email || null, cpf: cpf || null })
+      .eq('id', clienteId);
     setSalvandoCliente(false);
     if (error) { setErro(error.message); return; }
     onAtualizado();
@@ -280,13 +290,21 @@ function EditarClienteModal({ clienteId, quadras, modalidades, onFechar, onAtual
                 <span className="text-sm text-areia-muted block mb-1">Telefone</span>
                 <input value={telefone} onChange={(e) => setTelefone(e.target.value)} className="bg-night border border-night-line rounded-lg px-3 py-2 text-areia w-full" />
               </label>
+              <label className="block">
+                <span className="text-sm text-areia-muted block mb-1">E-mail (opcional)</span>
+                <input value={email} onChange={(e) => setEmail(e.target.value)} className="bg-night border border-night-line rounded-lg px-3 py-2 text-areia w-full" />
+              </label>
+              <label className="block">
+                <span className="text-sm text-areia-muted block mb-1">CPF (opcional)</span>
+                <input value={cpf} onChange={(e) => setCpf(e.target.value)} className="bg-night border border-night-line rounded-lg px-3 py-2 text-areia w-full" />
+              </label>
             </div>
             <button
               onClick={salvarCliente}
               disabled={salvandoCliente}
               className="text-coral hover:text-coral-hover text-sm mb-6"
             >
-              {salvandoCliente ? 'Salvando...' : 'Salvar nome/telefone'}
+              {salvandoCliente ? 'Salvando...' : 'Salvar dados do cliente'}
             </button>
 
             <h4 className="font-semibold text-sm text-areia-muted mb-2 uppercase tracking-wide">Horários fixos</h4>
@@ -405,6 +423,8 @@ function NovoMensalistaModal({ quadras, modalidades, onFechar, onCriado }) {
   const [valorMensal, setValorMensal] = useState('');
   const [nome, setNome] = useState('');
   const [telefone, setTelefone] = useState('');
+  const [email, setEmail] = useState('');
+  const [cpf, setCpf] = useState('');
   const [enviando, setEnviando] = useState(false);
   const [erro, setErro] = useState(null);
 
@@ -418,7 +438,7 @@ function NovoMensalistaModal({ quadras, modalidades, onFechar, onCriado }) {
       let clienteId = clienteExistente?.id;
       if (!clienteId) {
         const { data: novoCliente, error: erroCliente } = await supabase
-          .from('clientes').insert({ nome, telefone }).select('id').single();
+          .from('clientes').insert({ nome, telefone, email: email || null, cpf: cpf || null }).select('id').single();
         if (erroCliente) throw erroCliente;
         clienteId = novoCliente.id;
       }
@@ -454,6 +474,14 @@ function NovoMensalistaModal({ quadras, modalidades, onFechar, onCriado }) {
           <label className="block">
             <span className="text-sm text-areia-muted block mb-1">Telefone</span>
             <input value={telefone} onChange={(e) => setTelefone(e.target.value)} className="bg-night border border-night-line rounded-lg px-3 py-2 text-areia w-full" />
+          </label>
+          <label className="block">
+            <span className="text-sm text-areia-muted block mb-1">E-mail (opcional)</span>
+            <input value={email} onChange={(e) => setEmail(e.target.value)} className="bg-night border border-night-line rounded-lg px-3 py-2 text-areia w-full" />
+          </label>
+          <label className="block">
+            <span className="text-sm text-areia-muted block mb-1">CPF (opcional)</span>
+            <input value={cpf} onChange={(e) => setCpf(e.target.value)} className="bg-night border border-night-line rounded-lg px-3 py-2 text-areia w-full" />
           </label>
         </div>
 
