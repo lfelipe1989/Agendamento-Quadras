@@ -58,10 +58,16 @@ export default function AgendaDia({ quadras, modalidades, horaInicioNoturno }) {
 
       const itensAvulsos = (reservas || []).map((r) => ({ ...r, tipo: 'avulsa' }));
       const itensMensalistas = (mensalistas || []).map((m) => ({ ...m, tipo: 'mensalista' }));
+      const todosItens = [...itensAvulsos, ...itensMensalistas];
 
+      // Marca TODOS os slots cobertos pelo intervalo do item (ex: reserva das 17h-20h
+      // ocupa os slots de 17h, 18h e 19h), não só o horário exato de início.
       const mapaPorHorario = {};
-      [...itensAvulsos, ...itensMensalistas].forEach((item) => {
-        mapaPorHorario[item.hora_inicio.slice(0, 5)] = item;
+      slotsDoDia.forEach((slot) => {
+        const item = todosItens.find(
+          (it) => slot.hora_inicio >= it.hora_inicio.slice(0, 5) && slot.hora_inicio < it.hora_fim.slice(0, 5)
+        );
+        if (item) mapaPorHorario[slot.hora_inicio] = item;
       });
       resultado[q.id] = mapaPorHorario;
     }
