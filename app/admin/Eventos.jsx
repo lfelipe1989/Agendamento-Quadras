@@ -368,15 +368,23 @@ function EditarEventoModal({ item, quadra, data, quadras, modalidades, onFechar,
         .eq('id', item.evento_id);
       if (erroEvento) throw erroEvento;
 
-      // Se a data foi alterada, move todos os horários do evento pra nova data
+      // Se a data foi alterada, move todos os horários do evento pra nova data,
+      // conferindo disponibilidade antes (pega inclusive conflito com mensalista,
+      // que a constraint do banco sozinha não cobre)
       if (novaData !== slotsDoEvento[0]?.data) {
         const falhas = [];
         for (const slot of slotsDoEvento) {
+          const disponiveis = await buscarHorariosDisponiveis(slot.quadra_id, novaData, slot.id);
+          const slotAlvo = disponiveis.find((h) => h.hora_inicio === slot.hora_inicio.slice(0, 5));
+          if (slotAlvo && !slotAlvo.disponivel) {
+            falhas.push(`${slot.quadras?.nome} ${slot.hora_inicio.slice(0, 5)}`);
+            continue;
+          }
           const { error } = await supabase.from('reservas').update({ data: novaData }).eq('id', slot.id);
           if (error) falhas.push(`${slot.quadras?.nome} ${slot.hora_inicio.slice(0, 5)}`);
         }
         if (falhas.length > 0) {
-          setErro(`Dados do evento salvos, mas alguns horários não puderam mudar de data (podem já estar ocupados no novo dia): ${falhas.join(', ')}`);
+          setErro(`Dados do evento salvos, mas alguns horários não puderam mudar de data (já ocupados no novo dia): ${falhas.join(', ')}`);
           return;
         }
       }

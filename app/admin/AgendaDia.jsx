@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useCallback } from 'react';
 import { supabase } from '@/lib/supabaseClient';
-import { buscarHorariosDisponiveis, buscarSlotsDoDia, buscarMensalistasEfetivosDoDia } from '@/lib/disponibilidade';
+import { buscarHorariosDisponiveis, buscarSlotsDoDia, buscarMensalistasEfetivosDoDia, verificarConflitoMensalista } from '@/lib/disponibilidade';
 
 const NOMES_MODALIDADE = {
   altinha: 'Altinha',
@@ -337,6 +337,12 @@ function EditarMensalistaDiaModal({ mensalistaId, data, quadras, modalidades, on
           );
         if (error) throw error;
       } else if (opcao === 'alterado') {
+        const disponiveis = await buscarHorariosDisponiveis(quadraId, data, null, mensalistaId);
+        const slotAlvo = disponiveis.find((h) => h.hora_inicio === horaInicio);
+        if (slotAlvo && !slotAlvo.disponivel) {
+          throw new Error('Esse horário já está ocupado nessa quadra nesse dia.');
+        }
+
         const { error } = await supabase
           .from('mensalista_excecoes')
           .upsert(
@@ -817,6 +823,14 @@ function NovaReservaModal({ quadra, data, horarioPreselecionado, modalidades, ho
       const clienteId = await encontrarOuCriarCliente();
 
       if (modo === 'mensalista') {
+        const conflito = await verificarConflitoMensalista({
+          quadraId: quadra.id,
+          diaSemana,
+          horaInicio: horarioEscolhido.hora_inicio,
+          horaFim: horarioEscolhido.hora_fim,
+        });
+        if (conflito) throw new Error(conflito);
+
         const { error } = await supabase.from('mensalistas').insert({
           cliente_id: clienteId,
           quadra_id: quadra.id,

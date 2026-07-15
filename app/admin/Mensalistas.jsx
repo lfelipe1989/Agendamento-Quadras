@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useCallback } from 'react';
 import { supabase } from '@/lib/supabaseClient';
+import { verificarConflitoMensalista } from '@/lib/disponibilidade';
 
 const NOMES_MODALIDADE = {
   altinha: 'Altinha',
@@ -230,6 +231,20 @@ function EditarClienteModal({ clienteId, quadras, modalidades, onFechar, onAtual
   async function salvarSlot(slot) {
     setSalvandoSlot(slot.id);
     setErro(null);
+
+    const conflito = await verificarConflitoMensalista({
+      quadraId: slot.quadra_id,
+      diaSemana: Number(slot.dia_semana),
+      horaInicio: slot.hora_inicio.slice(0, 5),
+      horaFim: slot.hora_fim.slice(0, 5),
+      excluirMensalistaId: slot.id,
+    });
+    if (conflito) {
+      setSalvandoSlot(null);
+      setErro(conflito);
+      return;
+    }
+
     const { error } = await supabase
       .from('mensalistas')
       .update({
@@ -432,6 +447,17 @@ function NovoMensalistaModal({ quadras, modalidades, onFechar, onCriado }) {
     setEnviando(true);
     setErro(null);
     try {
+      const conflito = await verificarConflitoMensalista({
+        quadraId,
+        diaSemana,
+        horaInicio,
+        horaFim,
+      });
+      if (conflito) {
+        setErro(conflito);
+        return;
+      }
+
       let { data: clienteExistente } = await supabase
         .from('clientes').select('id').eq('telefone', telefone).maybeSingle();
 
