@@ -22,7 +22,7 @@ function dataParaString(d) {
   return `${ano}-${mes}-${dia}`;
 }
 
-export default function AgendaDia({ quadras, modalidades }) {
+export default function AgendaDia({ quadras, modalidades, horaInicioNoturno }) {
   const [data, setData] = useState(dataParaString(new Date()));
   const [slots, setSlots] = useState([]);
   const [itensPorQuadra, setItensPorQuadra] = useState({});
@@ -213,6 +213,7 @@ export default function AgendaDia({ quadras, modalidades }) {
           data={data}
           horarioPreselecionado={celulaSelecionada.horario}
           modalidades={modalidades}
+          horaInicioNoturno={horaInicioNoturno}
           onFechar={() => setCelulaSelecionada(null)}
           onCriada={() => { setCelulaSelecionada(null); carregar(); }}
         />
@@ -334,7 +335,7 @@ function UltimosAgendamentos({ modalidades }) {
   );
 }
 
-function NovaReservaModal({ quadra, data, horarioPreselecionado, modalidades, onFechar, onCriada }) {
+function NovaReservaModal({ quadra, data, horarioPreselecionado, modalidades, horaInicioNoturno, onFechar, onCriada }) {
   const [horarios, setHorarios] = useState([]);
   const [horarioEscolhido, setHorarioEscolhido] = useState(horarioPreselecionado || null);
   const [modalidade, setModalidade] = useState(null);
@@ -353,11 +354,12 @@ function NovaReservaModal({ quadra, data, horarioPreselecionado, modalidades, on
   }, [quadra, data]);
 
   useEffect(() => {
-    if (modalidade) {
+    if (modalidade && horarioEscolhido) {
       const info = modalidades.find((m) => m.modalidade === modalidade);
-      setValor(info?.valor_hora_avulsa || 0);
+      const noturno = horarioEscolhido.hora_inicio >= (horaInicioNoturno || '18:00');
+      setValor(info ? (noturno ? info.valor_noturno : info.valor_diurno) : 0);
     }
-  }, [modalidade]);
+  }, [modalidade, horarioEscolhido]);
 
   async function salvar() {
     setEnviando(true);
