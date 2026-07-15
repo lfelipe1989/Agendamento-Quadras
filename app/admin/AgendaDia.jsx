@@ -684,16 +684,24 @@ function UltimosAgendamentos({ modalidades }) {
 }
 
 function NovaReservaModal({ quadra, data, horarioPreselecionado, modalidades, horaInicioNoturno, onFechar, onCriada }) {
+  const [modo, setModo] = useState('avulsa'); // 'avulsa' | 'mensalista'
   const [horarios, setHorarios] = useState([]);
   const [horarioEscolhido, setHorarioEscolhido] = useState(horarioPreselecionado || null);
   const [modalidade, setModalidade] = useState(null);
   const [nome, setNome] = useState('');
   const [telefone, setTelefone] = useState('');
+  const [email, setEmail] = useState('');
+  const [cpf, setCpf] = useState('');
+  const [clienteEncontrado, setClienteEncontrado] = useState(false);
+  const [sugestoesNome, setSugestoesNome] = useState([]);
   const [valor, setValor] = useState('');
+  const [valorMensal, setValorMensal] = useState('');
   const [statusPagamento, setStatusPagamento] = useState('pendente');
   const [formaPagamento, setFormaPagamento] = useState('dinheiro');
   const [enviando, setEnviando] = useState(false);
   const [erro, setErro] = useState(null);
+
+  const diaSemana = new Date(`${data}T00:00:00`).getDay();
 
   useEffect(() => {
     if (!horarioPreselecionado) {
@@ -702,26 +710,92 @@ function NovaReservaModal({ quadra, data, horarioPreselecionado, modalidades, ho
   }, [quadra, data]);
 
   useEffect(() => {
-    if (modalidade && horarioEscolhido) {
+    if (modo === 'avulsa' && modalidade && horarioEscolhido) {
       const info = modalidades.find((m) => m.modalidade === modalidade);
       const noturno = horarioEscolhido.hora_inicio >= (horaInicioNoturno || '18:00');
       setValor(info ? (noturno ? info.valor_noturno : info.valor_diurno) : 0);
     }
-  }, [modalidade, horarioEscolhido]);
+  }, [modo, modalidade, horarioEscolhido]);
+
+  // Busca cliente já cadastrado pelo telefone e preenche nome/email/cpf automaticamente
+  async function buscarClientePorTelefone() {
+    if (!telefone) return;
+    const { data: cliente } = await supabase
+      .from('clientes')
+      .select('*')
+      .eq('telefone', telefone)
+      .maybeSingle();
+    if (cliente) {
+      setNome(cliente.nome || '');
+      setEmail(cliente.email || '');
+      setCpf(cliente.cpf || '');
+      setClienteEncontrado(true);
+    } else {
+      setClienteEncontrado(false);
+    }
+  }
+
+  // Busca sugestões de clientes existentes conforme o nome é digitado
+  useEffect(() => {
+    if (clienteEncontrado || nome.trim().length < 2) {
+      setSugestoesNome([]);
+      return;
+    }
+    const atraso = setTimeout(async () => {
+      const { data } = await supabase
+        .from('clientes')
+        .select('*')
+        .ilike('nome', `%${nome.trim()}%`)
+        .limit(5);
+      setSugestoesNome(data || []);
+    }, 300);
+    return () => clearTimeout(atraso);
+  }, [nome, clienteEncontrado]);
+
+  function selecionarSugestao(cliente) {
+    setNome(cliente.nome || '');
+    setTelefone(cliente.telefone || '');
+    setEmail(cliente.email || '');
+    setCpf(cliente.cpf || '');
+    setClienteEncontrado(true);
+    setSugestoesNome([]);
+  }
+
+  async function encontrarOuCriarCliente() {
+    let { data: clienteExistente } = await supabase
+      .from('clientes').select('id').eq('telefone', telefone).maybeSingle();
+
+    if (clienteExistente?.id) {
+      // atualiza os dados, caso tenham sido complementados/corrigidos aqui
+      await supabase.from('clientes').update({ nome, email: email || null, cpf: cpf || null }).eq('id', clienteExistente.id);
+      return clienteExistente.id;
+    }
+
+    const { data: novoCliente, error: erroCliente } = await supabase
+      .from('clientes').insert({ nome, telefone, email: email || null, cpf: cpf || null }).select('id').single();
+    if (erroCliente) throw erroCliente;
+    return novoCliente.id;
+  }
 
   async function salvar() {
     setEnviando(true);
     setErro(null);
     try {
-      let { data: clienteExistente } = await supabase
-        .from('clientes').select('id').eq('telefone', telefone).maybeSingle();
+      const clienteId = await encontrarOuCriarCliente();
 
-      let clienteId = clienteExistente?.id;
-      if (!clienteId) {
-        const { data: novoCliente, error: erroCliente } = await supabase
-          .from('clientes').insert({ nome, telefone }).select('id').single();
-        if (erroCliente) throw erroCliente;
-        clienteId = novoCliente.id;
+      if (modo === 'mensalista') {
+        const { error } = await supabase.from('mensalistas').insert({
+          cliente_id: clienteId,
+          quadra_id: quadra.id,
+          modalidade,
+          dia_semana: diaSemana,
+          hora_inicio: horarioEscolhido.hora_inicio,
+          hora_fim: horarioEscolhido.hora_fim,
+          valor_mensal: valorMensal,
+        });
+        if (error) throw error;
+        onCriada();
+        return;
       }
 
       const { error: erroReserva } = await supabase.from('reservas').insert({
@@ -744,22 +818,47 @@ function NovaReservaModal({ quadra, data, horarioPreselecionado, modalidades, ho
       }
       onCriada();
     } catch (e) {
-      setErro(e.message || 'Erro ao criar reserva.');
+      setErro(e.message || 'Erro ao salvar.');
     } finally {
       setEnviando(false);
     }
   }
 
+  const podeSalvar = modo === 'mensalista'
+    ? !!(horarioEscolhido && modalidade && nome && telefone && valorMensal)
+    : !!(horarioEscolhido && modalidade && nome && telefone);
+
   return (
     <div className="fixed inset-0 bg-black/60 flex items-center justify-center p-4 z-50">
       <div className="bg-night-panel border border-night-line rounded-2xl p-6 w-full max-w-md max-h-[90vh] overflow-y-auto">
-        <h3 className="font-display text-xl tracking-wide mb-4">NOVA RESERVA · {quadra.nome}</h3>
+        <h3 className="font-display text-xl tracking-wide mb-1">{quadra.nome}</h3>
+        <p className="text-areia-muted text-sm mb-4">
+          {DIAS_SEMANA[diaSemana]}-feira, {data.split('-').reverse().join('/')}
+          {horarioPreselecionado && ` · ${horarioPreselecionado.hora_inicio}–${horarioPreselecionado.hora_fim}`}
+        </p>
 
-        {horarioPreselecionado ? (
-          <p className="text-areia-muted text-sm mb-3">
-            Horário: <span className="text-areia font-semibold">{horarioPreselecionado.hora_inicio}–{horarioPreselecionado.hora_fim}</span>
+        <div className="flex gap-2 mb-4">
+          <button
+            onClick={() => setModo('avulsa')}
+            className={`flex-1 text-sm font-semibold px-3 py-2 rounded-full ${modo === 'avulsa' ? 'bg-coral text-night' : 'bg-night text-areia-muted'}`}
+          >
+            Reserva avulsa
+          </button>
+          <button
+            onClick={() => setModo('mensalista')}
+            className={`flex-1 text-sm font-semibold px-3 py-2 rounded-full ${modo === 'mensalista' ? 'bg-coral text-night' : 'bg-night text-areia-muted'}`}
+          >
+            Mensalista
+          </button>
+        </div>
+
+        {modo === 'mensalista' && (
+          <p className="text-volei text-xs mb-4">
+            Vai virar um horário fixo toda {DIAS_SEMANA[diaSemana]}-feira, às {horarioPreselecionado?.hora_inicio}, nessa quadra. Dá pra ajustar tudo depois na aba Mensalistas.
           </p>
-        ) : (
+        )}
+
+        {!horarioPreselecionado && (
           <label className="block mb-3">
             <span className="text-sm text-areia-muted block mb-1">Horário</span>
             <div className="grid grid-cols-4 gap-2">
@@ -790,36 +889,84 @@ function NovaReservaModal({ quadra, data, horarioPreselecionado, modalidades, ho
           </select>
         </label>
 
-        <div className="grid grid-cols-2 gap-3 mb-3">
-          <label className="block">
-            <span className="text-sm text-areia-muted block mb-1">Nome</span>
-            <input value={nome} onChange={(e) => setNome(e.target.value)} className="bg-night border border-night-line rounded-lg px-3 py-2 text-areia w-full" />
-          </label>
+        <div className="grid grid-cols-2 gap-3 mb-1">
           <label className="block">
             <span className="text-sm text-areia-muted block mb-1">Telefone</span>
-            <input value={telefone} onChange={(e) => setTelefone(e.target.value)} className="bg-night border border-night-line rounded-lg px-3 py-2 text-areia w-full" />
+            <input
+              value={telefone}
+              onChange={(e) => { setTelefone(e.target.value); setClienteEncontrado(false); }}
+              onBlur={buscarClientePorTelefone}
+              className="bg-night border border-night-line rounded-lg px-3 py-2 text-areia w-full"
+            />
+          </label>
+          <label className="block relative">
+            <span className="text-sm text-areia-muted block mb-1">Nome</span>
+            <input
+              value={nome}
+              onChange={(e) => { setNome(e.target.value); setClienteEncontrado(false); }}
+              className="bg-night border border-night-line rounded-lg px-3 py-2 text-areia w-full"
+              autoComplete="off"
+            />
+            {sugestoesNome.length > 0 && (
+              <div className="absolute top-full left-0 right-0 mt-1 bg-night border border-night-line rounded-lg z-10 overflow-hidden">
+                {sugestoesNome.map((c) => (
+                  <button
+                    key={c.id}
+                    type="button"
+                    onMouseDown={() => selecionarSugestao(c)}
+                    className="w-full text-left px-3 py-2 text-sm hover:bg-night-line/40 border-b border-night-line last:border-0"
+                  >
+                    <span className="font-semibold">{c.nome}</span>
+                    <span className="text-areia-muted"> · {c.telefone}</span>
+                  </button>
+                ))}
+              </div>
+            )}
           </label>
         </div>
+        {clienteEncontrado && (
+          <p className="text-sucesso text-xs mb-2">Cliente já cadastrado — dados preenchidos automaticamente.</p>
+        )}
 
         <div className="grid grid-cols-2 gap-3 mb-3">
           <label className="block">
-            <span className="text-sm text-areia-muted block mb-1">Valor (R$)</span>
-            <input type="number" value={valor} onChange={(e) => setValor(e.target.value)} className="bg-night border border-night-line rounded-lg px-3 py-2 text-areia w-full" />
+            <span className="text-sm text-areia-muted block mb-1">E-mail (opcional)</span>
+            <input value={email} onChange={(e) => setEmail(e.target.value)} className="bg-night border border-night-line rounded-lg px-3 py-2 text-areia w-full" />
           </label>
           <label className="block">
-            <span className="text-sm text-areia-muted block mb-1">Forma de pagamento</span>
-            <select value={formaPagamento} onChange={(e) => setFormaPagamento(e.target.value)} className="bg-night border border-night-line rounded-lg px-3 py-2 text-areia w-full">
-              <option value="dinheiro">Dinheiro</option>
-              <option value="pix">Pix</option>
-              <option value="cartao">Cartão</option>
-            </select>
+            <span className="text-sm text-areia-muted block mb-1">CPF (opcional)</span>
+            <input value={cpf} onChange={(e) => setCpf(e.target.value)} className="bg-night border border-night-line rounded-lg px-3 py-2 text-areia w-full" />
           </label>
         </div>
 
-        <label className="flex items-center gap-2 mb-4">
-          <input type="checkbox" checked={statusPagamento === 'pago'} onChange={(e) => setStatusPagamento(e.target.checked ? 'pago' : 'pendente')} />
-          <span className="text-sm">Já pagou</span>
-        </label>
+        {modo === 'avulsa' ? (
+          <>
+            <div className="grid grid-cols-2 gap-3 mb-3">
+              <label className="block">
+                <span className="text-sm text-areia-muted block mb-1">Valor (R$)</span>
+                <input type="number" value={valor} onChange={(e) => setValor(e.target.value)} className="bg-night border border-night-line rounded-lg px-3 py-2 text-areia w-full" />
+              </label>
+              <label className="block">
+                <span className="text-sm text-areia-muted block mb-1">Forma de pagamento</span>
+                <select value={formaPagamento} onChange={(e) => setFormaPagamento(e.target.value)} className="bg-night border border-night-line rounded-lg px-3 py-2 text-areia w-full">
+                  <option value="dinheiro">Dinheiro</option>
+                  <option value="pix">Pix</option>
+                  <option value="cartao">Cartão</option>
+                </select>
+              </label>
+            </div>
+
+            <label className="flex items-center gap-2 mb-4">
+              <input type="checkbox" checked={statusPagamento === 'pago'} onChange={(e) => setStatusPagamento(e.target.checked ? 'pago' : 'pendente')} />
+              <span className="text-sm">Já pagou</span>
+            </label>
+          </>
+        ) : (
+          <label className="block mb-4">
+            <span className="text-sm text-areia-muted block mb-1">Valor mensal (R$)</span>
+            <input type="number" value={valorMensal} onChange={(e) => setValorMensal(e.target.value)} className="bg-night border border-night-line rounded-lg px-3 py-2 text-areia w-full" />
+          </label>
+        )}
 
         {erro && <p className="text-erro text-sm mb-3">{erro}</p>}
 
@@ -827,10 +974,10 @@ function NovaReservaModal({ quadra, data, horarioPreselecionado, modalidades, ho
           <button onClick={onFechar} className="text-areia-muted hover:text-areia px-4 py-2 text-sm">Cancelar</button>
           <button
             onClick={salvar}
-            disabled={!horarioEscolhido || !modalidade || !nome || !telefone || enviando}
+            disabled={!podeSalvar || enviando}
             className="bg-coral hover:bg-coral-hover disabled:opacity-30 text-night font-semibold px-6 py-2 rounded-full"
           >
-            {enviando ? 'Salvando...' : 'Salvar reserva'}
+            {enviando ? 'Salvando...' : modo === 'mensalista' ? 'Salvar mensalista' : 'Salvar reserva'}
           </button>
         </div>
       </div>
