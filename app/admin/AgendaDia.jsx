@@ -67,15 +67,56 @@ export default function AgendaDia({ quadras, modalidades }) {
     carregar();
   }
 
+  const [mostrarCalendario, setMostrarCalendario] = useState(false);
+  const hojeStr = new Date().toISOString().split('T')[0];
+  const ehHoje = data === hojeStr;
+
+  function mudarDia(delta) {
+    const d = new Date(`${data}T00:00:00`);
+    d.setDate(d.getDate() + delta);
+    setData(d.toISOString().split('T')[0]);
+  }
+
+  function formatarDataExtenso(d) {
+    const [ano, mes, dia] = d.split('-');
+    return `${dia}/${mes}/${ano}`;
+  }
+
   return (
     <div>
-      <input
-        type="date"
-        value={data}
-        onChange={(e) => setData(e.target.value)}
-        className="bg-night-panel border border-night-line rounded-lg px-4 py-2 text-areia mb-2"
-      />
-      <p className="text-areia-muted text-sm mb-6">{DIAS_SEMANA[new Date(`${data}T00:00:00`).getDay()]}-feira</p>
+      <div className="flex items-center gap-4 mb-1">
+        <button
+          onClick={() => mudarDia(-1)}
+          className="w-9 h-9 flex items-center justify-center rounded-full border border-night-line hover:border-areia-muted text-lg"
+        >
+          ‹
+        </button>
+        <div className="relative">
+          <button
+            onClick={() => setMostrarCalendario((v) => !v)}
+            className="font-display text-2xl tracking-wide px-2"
+          >
+            {ehHoje ? 'HOJE' : formatarDataExtenso(data)}
+          </button>
+          {mostrarCalendario && (
+            <input
+              type="date"
+              value={data}
+              autoFocus
+              onChange={(e) => { setData(e.target.value); setMostrarCalendario(false); }}
+              onBlur={() => setMostrarCalendario(false)}
+              className="absolute top-full left-0 mt-1 z-10 bg-night-panel border border-night-line rounded-lg px-3 py-2 text-areia"
+            />
+          )}
+        </div>
+        <button
+          onClick={() => mudarDia(1)}
+          className="w-9 h-9 flex items-center justify-center rounded-full border border-night-line hover:border-areia-muted text-lg"
+        >
+          ›
+        </button>
+      </div>
+      <p className="text-areia-muted text-sm mb-6">{DIAS_SEMANA[new Date(`${data}T00:00:00`).getDay()]}-feira · {formatarDataExtenso(data)}</p>
 
       {carregando && <p className="text-areia-muted">Carregando...</p>}
 
@@ -138,6 +179,8 @@ export default function AgendaDia({ quadras, modalidades }) {
         ))}
       </div>
 
+      <UltimosAgendamentos modalidades={modalidades} />
+
       {novaReservaQuadra && (
         <NovaReservaModal
           quadra={novaReservaQuadra}
@@ -147,6 +190,69 @@ export default function AgendaDia({ quadras, modalidades }) {
           onCriada={() => { setNovaReservaQuadra(null); carregar(); }}
         />
       )}
+    </div>
+  );
+}
+
+function UltimosAgendamentos({ modalidades }) {
+  const [itens, setItens] = useState([]);
+  const [carregando, setCarregando] = useState(true);
+
+  const carregar = useCallback(async () => {
+    const { data } = await supabase
+      .from('reservas')
+      .select('id, data, hora_inicio, modalidade, valor, status_pagamento, status_reserva, origem, created_at, clientes(nome, telefone), quadras(nome)')
+      .order('created_at', { ascending: false })
+      .limit(30);
+    setItens(data || []);
+    setCarregando(false);
+  }, []);
+
+  useEffect(() => {
+    carregar();
+    const intervalo = setInterval(carregar, 20000); // atualiza sozinho a cada 20s
+    return () => clearInterval(intervalo);
+  }, [carregar]);
+
+  return (
+    <div className="mt-8">
+      <div className="flex items-center justify-between mb-3">
+        <h3 className="font-display text-xl tracking-wide">ÚLTIMOS AGENDAMENTOS</h3>
+        <button onClick={carregar} className="text-areia-muted hover:text-areia text-xs">Atualizar</button>
+      </div>
+      <div className="bg-night-panel border border-night-line rounded-2xl divide-y divide-night-line overflow-hidden">
+        {carregando && <p className="text-areia-muted text-sm p-4">Carregando...</p>}
+        {!carregando && itens.length === 0 && <p className="text-areia-muted text-sm p-4">Nenhum agendamento ainda.</p>}
+        {itens.map((item) => (
+          <div key={item.id} className="p-3 flex items-center justify-between flex-wrap gap-2 text-sm">
+            <div>
+              <span className="font-semibold">{item.clientes?.nome}</span>
+              <span className="text-areia-muted"> · {item.clientes?.telefone}</span>
+            </div>
+            <div className="text-areia-muted flex items-center gap-2 flex-wrap">
+              <span>{item.quadras?.nome}</span>
+              <span>·</span>
+              <span
+                className="px-2 py-0.5 rounded-full text-[11px]"
+                style={{ backgroundColor: modalidades.find((m) => m.modalidade === item.modalidade)?.cor + '33', color: modalidades.find((m) => m.modalidade === item.modalidade)?.cor }}
+              >
+                {NOMES_MODALIDADE[item.modalidade]}
+              </span>
+              <span>{item.data.split('-').reverse().join('/')} {item.hora_inicio.slice(0, 5)}</span>
+              <span className="text-[11px] px-2 py-0.5 rounded-full bg-night text-areia-muted">
+                {item.origem === 'link' ? 'via link' : 'balcão'}
+              </span>
+              {item.status_reserva === 'cancelada' ? (
+                <span className="text-[11px] px-2 py-0.5 rounded-full bg-erro/20 text-erro">Cancelada</span>
+              ) : (
+                <span className={`text-[11px] px-2 py-0.5 rounded-full ${item.status_pagamento === 'pago' ? 'bg-sucesso/20 text-sucesso' : 'bg-aviso/20 text-aviso'}`}>
+                  {item.status_pagamento === 'pago' ? '✓ Pago' : 'Pendente'}
+                </span>
+              )}
+            </div>
+          </div>
+        ))}
+      </div>
     </div>
   );
 }
