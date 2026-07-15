@@ -4,6 +4,7 @@ import { useState, useEffect } from 'react';
 import { supabase } from '@/lib/supabaseClient';
 import { validarCodigoAcesso } from '@/lib/staffAuth';
 import AgendaDia from './AgendaDia';
+import Eventos from './Eventos';
 import Mensalistas from './Mensalistas';
 import Horarios from './Horarios';
 
@@ -58,11 +59,13 @@ export default function AdminPage() {
 
         <div className="flex gap-2 mb-6">
           <BotaoAba ativo={aba === 'agenda'} onClick={() => setAba('agenda')}>Agenda do dia</BotaoAba>
+          <BotaoAba ativo={aba === 'eventos'} onClick={() => setAba('eventos')}>Eventos</BotaoAba>
           <BotaoAba ativo={aba === 'mensalistas'} onClick={() => setAba('mensalistas')}>Mensalistas</BotaoAba>
           <BotaoAba ativo={aba === 'horarios'} onClick={() => setAba('horarios')}>Horários</BotaoAba>
         </div>
 
         {aba === 'agenda' && <AgendaDia quadras={quadras} modalidades={modalidades} horaInicioNoturno={horaInicioNoturno} />}
+        {aba === 'eventos' && <Eventos quadras={quadras} modalidades={modalidades} />}
         {aba === 'mensalistas' && <Mensalistas quadras={quadras} modalidades={modalidades} />}
         {aba === 'horarios' && <Horarios />}
       </div>

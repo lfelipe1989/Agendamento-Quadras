@@ -43,13 +43,13 @@ export default function AgendaDia({ quadras, modalidades, horaInicioNoturno }) {
     for (const q of quadras) {
       const { data: reservas } = await supabase
         .from('reservas')
-        .select('id, hora_inicio, hora_fim, modalidade, valor, status_pagamento, forma_pagamento, status_reserva, clientes(nome, telefone)')
+        .select('id, hora_inicio, hora_fim, modalidade, valor, status_pagamento, forma_pagamento, status_reserva, evento_id, clientes(nome, telefone), eventos(nome_responsavel, observacao)')
         .eq('quadra_id', q.id)
         .eq('data', data)
         .neq('status_reserva', 'cancelada')
         .order('hora_inicio');
 
-      const itensAvulsos = (reservas || []).map((r) => ({ ...r, tipo: 'avulsa' }));
+      const itensAvulsos = (reservas || []).map((r) => ({ ...r, tipo: r.evento_id ? 'evento' : 'avulsa' }));
       const itensMensalistas = efetivosMensalistas
         .filter((m) => m.quadra_id === q.id)
         .map((m) => ({ ...m, id: m.mensalista_id, tipo: 'mensalista' }));
@@ -176,11 +176,15 @@ export default function AgendaDia({ quadras, modalidades, horaInicioNoturno }) {
                     >
                       {item ? (
                         <>
-                          <div className="font-semibold truncate">{item.clientes?.nome}</div>
+                          <div className="font-semibold truncate">
+                            {item.tipo === 'evento' ? (item.eventos?.nome_responsavel || 'Evento') : item.clientes?.nome}
+                          </div>
                           <div className="opacity-90 truncate flex items-center gap-1">
                             <span>
                               {item.tipo === 'mensalista'
                                 ? (item.alteradoHoje ? 'Mensalista (alterado hoje)' : 'Mensalista')
+                                : item.tipo === 'evento'
+                                ? 'Evento'
                                 : NOMES_MODALIDADE[item.modalidade]}
                             </span>
                             {item.tipo === 'avulsa' && (
@@ -220,7 +224,7 @@ export default function AgendaDia({ quadras, modalidades, horaInicioNoturno }) {
         />
       )}
 
-      {detalheItem && detalheItem.item.tipo === 'avulsa' && (
+      {detalheItem && (detalheItem.item.tipo === 'avulsa' || detalheItem.item.tipo === 'evento') && (
         <EditarReservaModal
           reservaId={detalheItem.item.id}
           quadras={quadras}
