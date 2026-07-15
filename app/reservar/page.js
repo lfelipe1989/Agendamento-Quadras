@@ -14,6 +14,12 @@ export default async function ReservarPage() {
     .from('config_modalidade')
     .select('*');
 
+  const { data: config } = await supabase
+    .from('configuracao')
+    .select('hora_inicio_noturno')
+    .eq('id', 1)
+    .single();
+
   const erro = erroQuadras || erroModalidades;
 
   return (
@@ -36,7 +42,11 @@ export default async function ReservarPage() {
             Nenhuma quadra encontrada — a conexão funcionou, mas a tabela retornou vazia.
           </div>
         )}
-        <BookingFlow quadras={quadras || []} modalidades={modalidades || []} />
+        <BookingFlow
+          quadras={quadras || []}
+          modalidades={modalidades || []}
+          horaInicioNoturno={config?.hora_inicio_noturno?.slice(0, 5) || '18:00'}
+        />
       </div>
     </main>
   );
