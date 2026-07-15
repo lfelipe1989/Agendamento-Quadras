@@ -47,19 +47,28 @@ export default function AdminPage() {
   return (
     <main className="min-h-screen px-4 py-8 md:px-8 bg-night text-areia">
       <div className="max-w-5xl mx-auto">
-        <div className="flex items-center justify-between mb-6">
+        <div className="flex items-start justify-between mb-6">
           <div>
             <h1 className="font-display text-3xl tracking-wide">PAINEL DO BALCÃO</h1>
             <p className="text-areia-muted text-sm">Olá, {staff.nome}</p>
           </div>
-          <button onClick={fazerLogout} className="text-areia-muted hover:text-areia text-sm">
-            Sair
-          </button>
+          <div className="flex flex-col items-end gap-2">
+            <button onClick={fazerLogout} className="text-areia-muted hover:text-areia text-sm">
+              Sair
+            </button>
+            <button
+              onClick={() => setAba('eventos')}
+              className={`text-xs px-3 py-1.5 rounded-full border ${
+                aba === 'eventos' ? 'border-coral text-coral' : 'border-night-line text-areia-muted hover:text-areia'
+              }`}
+            >
+              Eventos
+            </button>
+          </div>
         </div>
 
         <div className="flex gap-2 mb-6">
           <BotaoAba ativo={aba === 'agenda'} onClick={() => setAba('agenda')}>Agenda do dia</BotaoAba>
-          <BotaoAba ativo={aba === 'eventos'} onClick={() => setAba('eventos')}>Eventos</BotaoAba>
           <BotaoAba ativo={aba === 'mensalistas'} onClick={() => setAba('mensalistas')}>Mensalistas</BotaoAba>
           <BotaoAba ativo={aba === 'horarios'} onClick={() => setAba('horarios')}>Horários</BotaoAba>
         </div>
