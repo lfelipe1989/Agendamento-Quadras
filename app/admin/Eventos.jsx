@@ -322,6 +322,7 @@ function NovoEventoModal({ data, slotsSelecionados, modalidades, onFechar, onCri
       if (erroEvento) throw erroEvento;
 
       const falhas = [];
+      let erroDetalhe = null;
       for (const slot of slotsSelecionados) {
         const { error } = await supabase.from('reservas').insert({
           quadra_id: slot.quadraId,
@@ -337,12 +338,21 @@ function NovoEventoModal({ data, slotsSelecionados, modalidades, onFechar, onCri
           evento_id: evento.id,
           observacoes: observacao || null,
         });
-        if (error) falhas.push(`${slot.quadra?.nome} ${slot.horaInicio}`);
+        if (error) {
+          falhas.push(`${slot.quadra?.nome} ${slot.horaInicio}`);
+          erroDetalhe = error.message;
+        }
+      }
+
+      if (falhas.length === slotsSelecionados.length) {
+        // Nenhum horário foi salvo — desfaz o evento órfão e deixa o modal aberto pra tentar de novo
+        await supabase.from('eventos').delete().eq('id', evento.id);
+        setErro(`Não foi possível salvar nenhum horário. Detalhe: ${erroDetalhe || 'erro desconhecido'}`);
+        return;
       }
 
       if (falhas.length > 0) {
-        setErro(`Evento criado, mas alguns horários não puderam ser reservados (podem ter sido ocupados nesse meio tempo): ${falhas.join(', ')}`);
-        setTimeout(onCriado, 2500);
+        setErro(`Evento criado, mas alguns horários não puderam ser reservados (podem ter sido ocupados nesse meio tempo): ${falhas.join(', ')}. Detalhe: ${erroDetalhe || ''}`);
         return;
       }
 
