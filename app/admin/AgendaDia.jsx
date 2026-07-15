@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useCallback } from 'react';
 import { supabase } from '@/lib/supabaseClient';
-import { buscarHorariosDisponiveis } from '@/lib/disponibilidade';
+import { buscarHorariosDisponiveis, buscarSlotsDoDia } from '@/lib/disponibilidade';
 
 const NOMES_MODALIDADE = {
   altinha: 'Altinha',
@@ -15,14 +15,19 @@ const DIAS_SEMANA = ['Domingo', 'Segunda', 'Terça', 'Quarta', 'Quinta', 'Sexta'
 
 export default function AgendaDia({ quadras, modalidades }) {
   const [data, setData] = useState(new Date().toISOString().split('T')[0]);
+  const [slots, setSlots] = useState([]);
   const [itensPorQuadra, setItensPorQuadra] = useState({});
   const [carregando, setCarregando] = useState(false);
-  const [novaReservaQuadra, setNovaReservaQuadra] = useState(null);
+  const [celulaSelecionada, setCelulaSelecionada] = useState(null); // { quadra, horario }
+  const [detalheItem, setDetalheItem] = useState(null); // item clicado pra ver/editar
 
   const carregar = useCallback(async () => {
     if (quadras.length === 0) return;
     setCarregando(true);
     const diaSemana = new Date(`${data}T00:00:00`).getDay();
+
+    const slotsDoDia = await buscarSlotsDoDia(data);
+    setSlots(slotsDoDia);
 
     const resultado = {};
     for (const q of quadras) {
@@ -45,9 +50,11 @@ export default function AgendaDia({ quadras, modalidades }) {
       const itensAvulsos = (reservas || []).map((r) => ({ ...r, tipo: 'avulsa' }));
       const itensMensalistas = (mensalistas || []).map((m) => ({ ...m, tipo: 'mensalista' }));
 
-      resultado[q.id] = [...itensAvulsos, ...itensMensalistas].sort((a, b) =>
-        a.hora_inicio.localeCompare(b.hora_inicio)
-      );
+      const mapaPorHorario = {};
+      [...itensAvulsos, ...itensMensalistas].forEach((item) => {
+        mapaPorHorario[item.hora_inicio.slice(0, 5)] = item;
+      });
+      resultado[q.id] = mapaPorHorario;
     }
     setItensPorQuadra(resultado);
     setCarregando(false);
@@ -58,12 +65,14 @@ export default function AgendaDia({ quadras, modalidades }) {
   async function alternarPagamento(item) {
     const novoStatus = item.status_pagamento === 'pago' ? 'pendente' : 'pago';
     await supabase.from('reservas').update({ status_pagamento: novoStatus }).eq('id', item.id);
+    setDetalheItem(null);
     carregar();
   }
 
   async function cancelarReserva(item) {
     if (!confirm('Cancelar essa reserva?')) return;
     await supabase.from('reservas').update({ status_reserva: 'cancelada' }).eq('id', item.id);
+    setDetalheItem(null);
     carregar();
   }
 
@@ -80,6 +89,13 @@ export default function AgendaDia({ quadras, modalidades }) {
   function formatarDataExtenso(d) {
     const [ano, mes, dia] = d.split('-');
     return `${dia}/${mes}/${ano}`;
+  }
+
+  function corDoItem(item) {
+    if (!item) return null;
+    if (item.tipo === 'mensalista') return { bg: 'bg-volei/25', text: 'text-volei', borda: 'border-volei/40' };
+    if (item.status_pagamento === 'pago') return { bg: 'bg-sucesso/25', text: 'text-sucesso', borda: 'border-sucesso/40' };
+    return { bg: 'bg-aviso/25', text: 'text-aviso', borda: 'border-aviso/40' };
   }
 
   return (
@@ -118,78 +134,130 @@ export default function AgendaDia({ quadras, modalidades }) {
       </div>
       <p className="text-areia-muted text-sm mb-6">{DIAS_SEMANA[new Date(`${data}T00:00:00`).getDay()]}-feira · {formatarDataExtenso(data)}</p>
 
-      {carregando && <p className="text-areia-muted">Carregando...</p>}
+      {carregando && <p className="text-areia-muted mb-4">Carregando...</p>}
 
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-        {quadras.map((q) => (
-          <div key={q.id} className="bg-night-panel border border-night-line rounded-2xl p-4">
-            <div className="flex items-center justify-between mb-3">
-              <h3 className="font-display text-xl tracking-wide">{q.nome}</h3>
-              <button
-                onClick={() => setNovaReservaQuadra(q)}
-                className="text-coral text-sm font-semibold hover:text-coral-hover"
-              >
-                + Nova reserva
-              </button>
-            </div>
+      {!carregando && slots.length === 0 && (
+        <p className="text-aviso text-sm mb-4">Fechado nesse dia (configurável na aba Horários).</p>
+      )}
 
-            <div className="space-y-2">
-              {(itensPorQuadra[q.id] || []).length === 0 && (
-                <p className="text-areia-muted text-sm">Nada agendado.</p>
-              )}
-              {(itensPorQuadra[q.id] || []).map((item) => (
-                <div key={`${item.tipo}-${item.id}`} className="bg-night rounded-lg p-3 text-sm">
-                  <div className="flex items-center justify-between mb-1">
-                    <span className="font-semibold">{item.hora_inicio.slice(0, 5)}–{item.hora_fim.slice(0, 5)}</span>
-                    <span
-                      className="text-[11px] px-2 py-0.5 rounded-full"
-                      style={{ backgroundColor: modalidades.find((m) => m.modalidade === item.modalidade)?.cor + '33', color: modalidades.find((m) => m.modalidade === item.modalidade)?.cor }}
-                    >
-                      {NOMES_MODALIDADE[item.modalidade]}
-                    </span>
-                  </div>
-                  <p className="text-areia-muted">{item.clientes?.nome} · {item.clientes?.telefone}</p>
+      {slots.length > 0 && (
+        <div className="overflow-x-auto bg-night-panel border border-night-line rounded-2xl">
+          <div
+            className="grid min-w-[600px]"
+            style={{ gridTemplateColumns: `70px repeat(${quadras.length}, 1fr)` }}
+          >
+            {/* cabeçalho */}
+            <div className="border-b border-r border-night-line p-2" />
+            {quadras.map((q) => (
+              <div key={q.id} className="border-b border-night-line p-2 text-center font-semibold text-sm">
+                {q.nome}
+              </div>
+            ))}
 
-                  {item.tipo === 'mensalista' ? (
-                    <span className="inline-block mt-2 text-[11px] px-2 py-0.5 rounded-full bg-volei/20 text-volei">
-                      Mensalista
-                    </span>
-                  ) : (
-                    <div className="flex items-center justify-between mt-2">
-                      <button
-                        onClick={() => alternarPagamento(item)}
-                        className={`text-[11px] px-2 py-0.5 rounded-full ${
-                          item.status_pagamento === 'pago' ? 'bg-sucesso/20 text-sucesso' : 'bg-aviso/20 text-aviso'
-                        }`}
-                      >
-                        {item.status_pagamento === 'pago' ? '✓ Pago' : 'Pendente'} · R$ {Number(item.valor).toFixed(2)}
-                      </button>
-                      <button
-                        onClick={() => cancelarReserva(item)}
-                        className="text-areia-muted hover:text-erro text-[11px]"
-                      >
-                        Cancelar
-                      </button>
-                    </div>
-                  )}
+            {/* linhas de horário */}
+            {slots.map((slot) => (
+              <div key={slot.hora_inicio} className="contents">
+                <div className="border-r border-b border-night-line p-2 text-xs text-areia-muted flex items-start">
+                  {slot.hora_inicio}
                 </div>
-              ))}
-            </div>
+                {quadras.map((q) => {
+                  const item = itensPorQuadra[q.id]?.[slot.hora_inicio];
+                  const cor = corDoItem(item);
+                  return (
+                    <button
+                      key={q.id}
+                      onClick={() =>
+                        item
+                          ? setDetalheItem({ item, quadra: q })
+                          : setCelulaSelecionada({ quadra: q, horario: slot })
+                      }
+                      className={`border-b border-night-line p-2 text-left text-xs min-h-[52px] transition-colors ${
+                        item
+                          ? `${cor.bg} ${cor.text} border-l-2 ${cor.borda}`
+                          : 'hover:bg-night-line/40'
+                      }`}
+                    >
+                      {item ? (
+                        <>
+                          <div className="font-semibold truncate">{item.clientes?.nome}</div>
+                          <div className="opacity-80 truncate">
+                            {item.tipo === 'mensalista' ? 'Mensalista' : NOMES_MODALIDADE[item.modalidade]}
+                          </div>
+                        </>
+                      ) : (
+                        <span className="text-areia-muted/30">livre</span>
+                      )}
+                    </button>
+                  );
+                })}
+              </div>
+            ))}
           </div>
-        ))}
-      </div>
+        </div>
+      )}
 
       <UltimosAgendamentos modalidades={modalidades} />
 
-      {novaReservaQuadra && (
+      {celulaSelecionada && (
         <NovaReservaModal
-          quadra={novaReservaQuadra}
+          quadra={celulaSelecionada.quadra}
           data={data}
+          horarioPreselecionado={celulaSelecionada.horario}
           modalidades={modalidades}
-          onFechar={() => setNovaReservaQuadra(null)}
-          onCriada={() => { setNovaReservaQuadra(null); carregar(); }}
+          onFechar={() => setCelulaSelecionada(null)}
+          onCriada={() => { setCelulaSelecionada(null); carregar(); }}
         />
       )}
+
+      {detalheItem && (
+        <DetalheItemModal
+          item={detalheItem.item}
+          quadra={detalheItem.quadra}
+          modalidades={modalidades}
+          onFechar={() => setDetalheItem(null)}
+          onAlternarPagamento={() => alternarPagamento(detalheItem.item)}
+          onCancelar={() => cancelarReserva(detalheItem.item)}
+        />
+      )}
+    </div>
+  );
+}
+
+function DetalheItemModal({ item, quadra, modalidades, onFechar, onAlternarPagamento, onCancelar }) {
+  const cor = modalidades.find((m) => m.modalidade === item.modalidade)?.cor;
+  return (
+    <div className="fixed inset-0 bg-black/60 flex items-center justify-center p-4 z-50">
+      <div className="bg-night-panel border border-night-line rounded-2xl p-6 w-full max-w-sm">
+        <h3 className="font-display text-xl tracking-wide mb-1">{quadra.nome}</h3>
+        <p className="text-areia-muted text-sm mb-4">
+          {item.hora_inicio.slice(0, 5)}–{item.hora_fim.slice(0, 5)} ·{' '}
+          <span style={{ color: cor }}>{NOMES_MODALIDADE[item.modalidade]}</span>
+        </p>
+        <p className="font-semibold mb-1">{item.clientes?.nome}</p>
+        <p className="text-areia-muted text-sm mb-4">{item.clientes?.telefone}</p>
+
+        {item.tipo === 'mensalista' ? (
+          <p className="text-volei text-sm mb-4">Horário fixo de mensalista — gerencie pagamento na aba Mensalistas.</p>
+        ) : (
+          <>
+            <button
+              onClick={onAlternarPagamento}
+              className={`w-full text-sm px-3 py-2 rounded-lg mb-3 ${
+                item.status_pagamento === 'pago' ? 'bg-sucesso/20 text-sucesso' : 'bg-aviso/20 text-aviso'
+              }`}
+            >
+              {item.status_pagamento === 'pago' ? '✓ Pago' : 'Pendente'} · R$ {Number(item.valor).toFixed(2)} — clique pra alternar
+            </button>
+            <button onClick={onCancelar} className="w-full text-sm px-3 py-2 rounded-lg text-erro hover:bg-erro/10 mb-3">
+              Cancelar reserva
+            </button>
+          </>
+        )}
+
+        <button onClick={onFechar} className="w-full text-areia-muted hover:text-areia text-sm py-2">
+          Fechar
+        </button>
+      </div>
     </div>
   );
 }
@@ -210,7 +278,7 @@ function UltimosAgendamentos({ modalidades }) {
 
   useEffect(() => {
     carregar();
-    const intervalo = setInterval(carregar, 20000); // atualiza sozinho a cada 20s
+    const intervalo = setInterval(carregar, 20000);
     return () => clearInterval(intervalo);
   }, [carregar]);
 
@@ -257,9 +325,9 @@ function UltimosAgendamentos({ modalidades }) {
   );
 }
 
-function NovaReservaModal({ quadra, data, modalidades, onFechar, onCriada }) {
+function NovaReservaModal({ quadra, data, horarioPreselecionado, modalidades, onFechar, onCriada }) {
   const [horarios, setHorarios] = useState([]);
-  const [horarioEscolhido, setHorarioEscolhido] = useState(null);
+  const [horarioEscolhido, setHorarioEscolhido] = useState(horarioPreselecionado || null);
   const [modalidade, setModalidade] = useState(null);
   const [nome, setNome] = useState('');
   const [telefone, setTelefone] = useState('');
@@ -270,7 +338,9 @@ function NovaReservaModal({ quadra, data, modalidades, onFechar, onCriada }) {
   const [erro, setErro] = useState(null);
 
   useEffect(() => {
-    buscarHorariosDisponiveis(quadra.id, data).then(setHorarios);
+    if (!horarioPreselecionado) {
+      buscarHorariosDisponiveis(quadra.id, data).then(setHorarios);
+    }
   }, [quadra, data]);
 
   useEffect(() => {
@@ -326,24 +396,30 @@ function NovaReservaModal({ quadra, data, modalidades, onFechar, onCriada }) {
       <div className="bg-night-panel border border-night-line rounded-2xl p-6 w-full max-w-md max-h-[90vh] overflow-y-auto">
         <h3 className="font-display text-xl tracking-wide mb-4">NOVA RESERVA · {quadra.nome}</h3>
 
-        <label className="block mb-3">
-          <span className="text-sm text-areia-muted block mb-1">Horário</span>
-          <div className="grid grid-cols-4 gap-2">
-            {horarios.map((h) => (
-              <button
-                key={h.hora_inicio}
-                disabled={!h.disponivel}
-                onClick={() => setHorarioEscolhido(h)}
-                className={`py-2 rounded-lg text-xs border ${
-                  !h.disponivel ? 'border-night-line text-areia-muted/40 line-through cursor-not-allowed'
-                  : horarioEscolhido?.hora_inicio === h.hora_inicio ? 'border-coral text-coral' : 'border-night-line'
-                }`}
-              >
-                {h.hora_inicio}
-              </button>
-            ))}
-          </div>
-        </label>
+        {horarioPreselecionado ? (
+          <p className="text-areia-muted text-sm mb-3">
+            Horário: <span className="text-areia font-semibold">{horarioPreselecionado.hora_inicio}–{horarioPreselecionado.hora_fim}</span>
+          </p>
+        ) : (
+          <label className="block mb-3">
+            <span className="text-sm text-areia-muted block mb-1">Horário</span>
+            <div className="grid grid-cols-4 gap-2">
+              {horarios.map((h) => (
+                <button
+                  key={h.hora_inicio}
+                  disabled={!h.disponivel}
+                  onClick={() => setHorarioEscolhido(h)}
+                  className={`py-2 rounded-lg text-xs border ${
+                    !h.disponivel ? 'border-night-line text-areia-muted/40 line-through cursor-not-allowed'
+                    : horarioEscolhido?.hora_inicio === h.hora_inicio ? 'border-coral text-coral' : 'border-night-line'
+                  }`}
+                >
+                  {h.hora_inicio}
+                </button>
+              ))}
+            </div>
+          </label>
+        )}
 
         <label className="block mb-3">
           <span className="text-sm text-areia-muted block mb-1">Modalidade</span>
