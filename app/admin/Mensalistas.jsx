@@ -27,6 +27,9 @@ export default function Mensalistas({ quadras, modalidades }) {
   const [carregando, setCarregando] = useState(false);
   const [mostrarForm, setMostrarForm] = useState(false);
   const [clienteEditando, setClienteEditando] = useState(null); // { clienteId, nome, telefone }
+  const [filtroDia, setFiltroDia] = useState('todos');
+  const [filtroModalidade, setFiltroModalidade] = useState('todos');
+  const [filtroNome, setFiltroNome] = useState('');
 
   const carregar = useCallback(async () => {
     setCarregando(true);
@@ -79,9 +82,16 @@ export default function Mensalistas({ quadras, modalidades }) {
     carregar();
   }
 
-  // Agrupa os horários (linhas de mensalistas) por cliente, pra mostrar um card por pessoa
+  // Agrupa os horários (linhas de mensalistas) por cliente, pra mostrar um card por pessoa,
+  // já aplicando os filtros de dia da semana e modalidade nos horários considerados
+  const mensalistasFiltrados = mensalistas.filter((m) => {
+    if (filtroDia !== 'todos' && m.dia_semana !== Number(filtroDia)) return false;
+    if (filtroModalidade !== 'todos' && m.modalidade !== filtroModalidade) return false;
+    return true;
+  });
+
   const porCliente = {};
-  mensalistas.forEach((m) => {
+  mensalistasFiltrados.forEach((m) => {
     if (!porCliente[m.cliente_id]) {
       porCliente[m.cliente_id] = {
         clienteId: m.cliente_id,
@@ -92,11 +102,14 @@ export default function Mensalistas({ quadras, modalidades }) {
     }
     porCliente[m.cliente_id].slots.push(m);
   });
-  const listaClientes = Object.values(porCliente);
+
+  const listaClientes = Object.values(porCliente)
+    .filter((c) => !filtroNome.trim() || c.nome?.toLowerCase().includes(filtroNome.trim().toLowerCase()))
+    .sort((a, b) => (a.nome || '').localeCompare(b.nome || '', 'pt-BR'));
 
   return (
     <div>
-      <div className="flex items-center justify-between mb-6 flex-wrap gap-3">
+      <div className="flex items-center justify-between mb-4 flex-wrap gap-3">
         <input
           type="month"
           value={mesReferencia}
@@ -111,6 +124,40 @@ export default function Mensalistas({ quadras, modalidades }) {
             + Novo mensalista
           </button>
         </div>
+      </div>
+
+      <div className="flex items-center gap-2 mb-6 flex-wrap">
+        <input
+          type="text"
+          value={filtroNome}
+          onChange={(e) => setFiltroNome(e.target.value)}
+          placeholder="Buscar por nome..."
+          className="bg-night-panel border border-night-line rounded-lg px-3 py-1.5 text-areia text-sm flex-1 min-w-[180px]"
+        />
+        <select
+          value={filtroDia}
+          onChange={(e) => setFiltroDia(e.target.value)}
+          className="bg-night-panel border border-night-line rounded-lg px-3 py-1.5 text-areia text-sm"
+        >
+          <option value="todos">Todos os dias</option>
+          {DIAS_SEMANA.map((d, i) => <option key={i} value={i}>{d}</option>)}
+        </select>
+        <select
+          value={filtroModalidade}
+          onChange={(e) => setFiltroModalidade(e.target.value)}
+          className="bg-night-panel border border-night-line rounded-lg px-3 py-1.5 text-areia text-sm"
+        >
+          <option value="todos">Todas as modalidades</option>
+          {modalidades.map((m) => <option key={m.modalidade} value={m.modalidade}>{NOMES_MODALIDADE[m.modalidade]}</option>)}
+        </select>
+        {(filtroNome || filtroDia !== 'todos' || filtroModalidade !== 'todos') && (
+          <button
+            onClick={() => { setFiltroNome(''); setFiltroDia('todos'); setFiltroModalidade('todos'); }}
+            className="text-areia-muted hover:text-areia text-xs px-2"
+          >
+            Limpar filtros
+          </button>
+        )}
       </div>
 
       {carregando && <p className="text-areia-muted">Carregando...</p>}
@@ -153,7 +200,11 @@ export default function Mensalistas({ quadras, modalidades }) {
           </div>
         ))}
         {listaClientes.length === 0 && !carregando && (
-          <p className="text-areia-muted text-sm">Nenhum mensalista ativo.</p>
+          <p className="text-areia-muted text-sm">
+            {filtroNome || filtroDia !== 'todos' || filtroModalidade !== 'todos'
+              ? 'Nenhum mensalista encontrado com esse filtro.'
+              : 'Nenhum mensalista ativo.'}
+          </p>
         )}
       </div>
 
