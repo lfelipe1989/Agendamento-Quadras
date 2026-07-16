@@ -5,6 +5,7 @@ import { supabase } from '@/lib/supabaseClient';
 import { validarCodigoAcesso } from '@/lib/staffAuth';
 import AgendaDia from './AgendaDia';
 import Eventos from './Eventos';
+import Churrasqueiras from './Churrasqueiras';
 import Mensalistas from './Mensalistas';
 import Horarios from './Horarios';
 
@@ -64,6 +65,14 @@ export default function AdminPage() {
             >
               Eventos
             </button>
+            <button
+              onClick={() => setAba('churrasqueiras')}
+              className={`text-xs px-3 py-1.5 rounded-full border ${
+                aba === 'churrasqueiras' ? 'border-coral text-coral' : 'border-night-line text-areia-muted hover:text-areia'
+              }`}
+            >
+              Churrasqueiras
+            </button>
           </div>
         </div>
 
@@ -75,6 +84,7 @@ export default function AdminPage() {
 
         {aba === 'agenda' && <AgendaDia quadras={quadras} modalidades={modalidades} horaInicioNoturno={horaInicioNoturno} />}
         {aba === 'eventos' && <Eventos quadras={quadras} modalidades={modalidades} />}
+        {aba === 'churrasqueiras' && <Churrasqueiras />}
         {aba === 'mensalistas' && <Mensalistas quadras={quadras} modalidades={modalidades} />}
         {aba === 'horarios' && <Horarios />}
       </div>
