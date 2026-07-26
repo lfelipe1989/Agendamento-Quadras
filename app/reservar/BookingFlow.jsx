@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from 'react';
 import { supabase } from '@/lib/supabaseClient';
-import { buscarDisponibilidadeTodasQuadras } from '@/lib/disponibilidade';
+import { buscarDisponibilidadeTodasQuadras, buscarHorariosDisponiveis } from '@/lib/disponibilidade';
 
 const NOMES_MODALIDADE = {
   altinha: 'Altinha',
@@ -71,6 +71,15 @@ export default function BookingFlow({ quadras, modalidades, horaInicioNoturno })
     setEnviando(true);
     setErro(null);
     try {
+      // Re-confere disponibilidade na hora H, em vez de confiar só na lista que já
+      // estava carregada na tela (pode estar desatualizada se a aba ficou aberta
+      // um tempo e o horário de funcionamento ou a agenda mudaram nesse meio tempo)
+      const horariosAtualizados = await buscarHorariosDisponiveis(quadraId, data);
+      const slotAtual = horariosAtualizados.find((h) => h.hora_inicio === horarioEscolhido.hora_inicio);
+      if (!slotAtual || !slotAtual.disponivel) {
+        throw new Error('Esse horário não está mais disponível. Volta e escolhe outro horário.');
+      }
+
       let { data: clienteExistente } = await supabase
         .from('clientes')
         .select('id')
