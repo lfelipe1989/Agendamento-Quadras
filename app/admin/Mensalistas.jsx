@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useCallback } from 'react';
 import { supabase } from '@/lib/supabaseClient';
-import { verificarConflitoMensalista } from '@/lib/disponibilidade';
+import { verificarConflitoMensalista, dentroDoHorarioFuncionamento } from '@/lib/disponibilidade';
 
 const NOMES_MODALIDADE = {
   altinha: 'Altinha',
@@ -283,6 +283,13 @@ function EditarClienteModal({ clienteId, quadras, modalidades, onFechar, onAtual
     setSalvandoSlot(slot.id);
     setErro(null);
 
+    const dentro = await dentroDoHorarioFuncionamento(Number(slot.dia_semana), slot.hora_inicio.slice(0, 5), slot.hora_fim.slice(0, 5));
+    if (!dentro) {
+      setSalvandoSlot(null);
+      setErro('Esse horário está fora do funcionamento configurado pra esse dia da semana (confere na aba Horários).');
+      return;
+    }
+
     const conflito = await verificarConflitoMensalista({
       quadraId: slot.quadra_id,
       diaSemana: Number(slot.dia_semana),
@@ -498,6 +505,12 @@ function NovoMensalistaModal({ quadras, modalidades, onFechar, onCriado }) {
     setEnviando(true);
     setErro(null);
     try {
+      const dentro = await dentroDoHorarioFuncionamento(diaSemana, horaInicio, horaFim);
+      if (!dentro) {
+        setErro('Esse horário está fora do funcionamento configurado pra esse dia da semana (confere na aba Horários).');
+        return;
+      }
+
       const conflito = await verificarConflitoMensalista({
         quadraId,
         diaSemana,

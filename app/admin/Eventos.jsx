@@ -376,7 +376,7 @@ function EditarEventoModal({ item, quadra, data, quadras, modalidades, onFechar,
         for (const slot of slotsDoEvento) {
           const disponiveis = await buscarHorariosDisponiveis(slot.quadra_id, novaData, slot.id);
           const slotAlvo = disponiveis.find((h) => h.hora_inicio === slot.hora_inicio.slice(0, 5));
-          if (slotAlvo && !slotAlvo.disponivel) {
+          if (!slotAlvo || !slotAlvo.disponivel) {
             falhas.push(`${slot.quadras?.nome} ${slot.hora_inicio.slice(0, 5)}`);
             continue;
           }
@@ -656,6 +656,14 @@ function NovoEventoModal({ data, slotsSelecionados, modalidades, onFechar, onCri
       const falhas = [];
       let erroDetalhe = null;
       for (const slot of slotsSelecionados) {
+        const disponiveis = await buscarHorariosDisponiveis(slot.quadraId, data);
+        const slotAtual = disponiveis.find((h) => h.hora_inicio === slot.horaInicio);
+        if (!slotAtual || !slotAtual.disponivel) {
+          falhas.push(`${slot.quadra?.nome} ${slot.horaInicio}`);
+          erroDetalhe = 'Horário não está mais disponível.';
+          continue;
+        }
+
         const { error } = await supabase.from('reservas').insert({
           quadra_id: slot.quadraId,
           cliente_id: clienteId,

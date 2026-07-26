@@ -339,8 +339,8 @@ function EditarMensalistaDiaModal({ mensalistaId, data, quadras, modalidades, on
       } else if (opcao === 'alterado') {
         const disponiveis = await buscarHorariosDisponiveis(quadraId, data, null, mensalistaId);
         const slotAlvo = disponiveis.find((h) => h.hora_inicio === horaInicio);
-        if (slotAlvo && !slotAlvo.disponivel) {
-          throw new Error('Esse horário já está ocupado nessa quadra nesse dia.');
+        if (!slotAlvo || !slotAlvo.disponivel) {
+          throw new Error('Esse horário não está disponível nessa quadra/dia (já ocupado, ou fora do horário de funcionamento).');
         }
 
         const { error } = await supabase
@@ -820,6 +820,14 @@ function NovaReservaModal({ quadra, data, horarioPreselecionado, modalidades, ho
     setEnviando(true);
     setErro(null);
     try {
+      // Re-confere se o horário escolhido continua válido e livre, em vez de
+      // confiar só na grade que já estava carregada na tela
+      const horariosAtualizados = await buscarHorariosDisponiveis(quadra.id, data);
+      const slotAtual = horariosAtualizados.find((h) => h.hora_inicio === horarioEscolhido.hora_inicio);
+      if (!slotAtual || !slotAtual.disponivel) {
+        throw new Error('Esse horário não está mais disponível (pode ter sido ocupado, ou o horário de funcionamento mudou). Fecha e tenta de novo.');
+      }
+
       const clienteId = await encontrarOuCriarCliente();
 
       if (modo === 'mensalista') {

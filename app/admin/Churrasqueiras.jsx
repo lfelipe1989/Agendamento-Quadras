@@ -335,6 +335,12 @@ function NovaReservaChurrasqueiraModal({ data, slotsSelecionados, onFechar, onCr
       const grupoId = gerarGrupoId();
       const falhas = [];
       for (const slot of slotsSelecionados) {
+        const disponiveis = await buscarHorariosDisponiveisChurrasqueira(slot.churrasqueiraId, data);
+        const slotAtual = disponiveis.find((h) => h.hora_inicio === slot.horaInicio);
+        if (!slotAtual || !slotAtual.disponivel) {
+          falhas.push(`${slot.churrasqueira?.nome} ${slot.horaInicio}`);
+          continue;
+        }
         const { error } = await supabase.from('reservas_churrasqueira').insert({
           grupo_id: grupoId,
           churrasqueira_id: slot.churrasqueiraId,
@@ -509,7 +515,7 @@ function EditarReservaChurrasqueiraModal({ item, churrasqueira, churrasqueiras, 
         for (const slot of slotsDoGrupo) {
           const disponiveis = await buscarHorariosDisponiveisChurrasqueira(slot.churrasqueira_id, novaData, slot.id);
           const slotAlvo = disponiveis.find((h) => h.hora_inicio === slot.hora_inicio.slice(0, 5));
-          if (slotAlvo && !slotAlvo.disponivel) {
+          if (!slotAlvo || !slotAlvo.disponivel) {
             falhas.push(`${slot.churrasqueiras?.nome} ${slot.hora_inicio.slice(0, 5)}`);
             continue;
           }
