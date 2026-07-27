@@ -111,11 +111,15 @@ function RelatorioFinanceiro({ staff, onLogout }) {
   const [filtroStatus, setFiltroStatus] = useState('todos'); // todos | pago | pendente
   const [filtroNome, setFiltroNome] = useState('');
   const [editando, setEditando] = useState(null); // { tipo: 'reserva'|'mensalidade', item }
+  const [dataInicioPeriodo, setDataInicioPeriodo] = useState('');
+  const [dataFimPeriodo, setDataFimPeriodo] = useState('');
+
+  const usandoPeriodo = !!(dataInicioPeriodo && dataFimPeriodo);
 
   const carregar = useCallback(async () => {
     setCarregando(true);
-    const inicio = primeiroDiaDoMes(mesReferencia);
-    const fim = ultimoDiaDoMes(mesReferencia);
+    const inicio = usandoPeriodo ? dataInicioPeriodo : primeiroDiaDoMes(mesReferencia);
+    const fim = usandoPeriodo ? dataFimPeriodo : ultimoDiaDoMes(mesReferencia);
 
     const { data: reservasDoMes } = await supabase
       .from('reservas')
@@ -128,12 +132,12 @@ function RelatorioFinanceiro({ staff, onLogout }) {
     const { data: mensalidadesDoMes } = await supabase
       .from('mensalidades')
       .select('id, valor, status, forma_pagamento, data_pagamento, mensalistas(quadras(nome), clientes(nome, telefone))')
-      .eq('mes_referencia', inicio);
+      .eq('mes_referencia', primeiroDiaDoMes(mesReferencia));
 
     setReservas(reservasDoMes || []);
     setMensalidades(mensalidadesDoMes || []);
     setCarregando(false);
-  }, [mesReferencia]);
+  }, [mesReferencia, dataInicioPeriodo, dataFimPeriodo, usandoPeriodo]);
 
   useEffect(() => { carregar(); }, [carregar]);
 
@@ -173,12 +177,13 @@ function RelatorioFinanceiro({ staff, onLogout }) {
           <button onClick={onLogout} className="text-areia-muted hover:text-areia text-sm">Sair</button>
         </div>
 
-        <div className="flex items-center gap-3 mb-6 flex-wrap">
+        <div className="flex items-center gap-3 mb-3 flex-wrap">
           <input
             type="month"
             value={mesReferencia}
             onChange={(e) => setMesReferencia(e.target.value)}
-            className="bg-night-panel border border-night-line rounded-lg px-4 py-2 text-areia"
+            disabled={usandoPeriodo}
+            className="bg-night-panel border border-night-line rounded-lg px-4 py-2 text-areia disabled:opacity-40"
           />
           <input
             type="text"
@@ -198,14 +203,39 @@ function RelatorioFinanceiro({ staff, onLogout }) {
           </select>
         </div>
 
+        <div className="flex items-center gap-3 mb-6 flex-wrap">
+          <span className="text-areia-muted text-xs">Período personalizado (só afeta reservas avulsas/eventos):</span>
+          <input
+            type="date"
+            value={dataInicioPeriodo}
+            onChange={(e) => setDataInicioPeriodo(e.target.value)}
+            className="bg-night-panel border border-night-line rounded-lg px-3 py-1.5 text-areia text-sm"
+          />
+          <span className="text-areia-muted text-xs">até</span>
+          <input
+            type="date"
+            value={dataFimPeriodo}
+            onChange={(e) => setDataFimPeriodo(e.target.value)}
+            className="bg-night-panel border border-night-line rounded-lg px-3 py-1.5 text-areia text-sm"
+          />
+          {usandoPeriodo && (
+            <button
+              onClick={() => { setDataInicioPeriodo(''); setDataFimPeriodo(''); }}
+              className="text-areia-muted hover:text-areia text-xs"
+            >
+              Limpar período
+            </button>
+          )}
+        </div>
+
         {carregando ? (
           <p className="text-areia-muted">Carregando...</p>
         ) : (
           <>
             {/* Resumo do mês */}
             <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-8">
-              <CartaoResumo titulo="Recebido no mês" valor={totalRecebido} cor="sucesso" />
-              <CartaoResumo titulo="Pendente no mês" valor={totalPendente} cor="aviso" />
+              <CartaoResumo titulo={usandoPeriodo ? 'Recebido no período' : 'Recebido no mês'} valor={totalRecebido} cor="sucesso" />
+              <CartaoResumo titulo={usandoPeriodo ? 'Pendente no período' : 'Pendente no mês'} valor={totalPendente} cor="aviso" />
               <CartaoResumo titulo="Avulsas + eventos" valor={totalReservasPago} sub={`${reservas.filter((r) => r.status_pagamento === 'pago').length} pagas`} />
               <CartaoResumo titulo="Mensalidades" valor={totalMensalidadesPago} sub={`${mensalidades.filter((m) => m.status === 'pago').length} pagas`} />
             </div>
