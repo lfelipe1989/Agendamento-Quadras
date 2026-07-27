@@ -109,6 +109,8 @@ function RelatorioFinanceiro({ staff, onLogout }) {
   const [mensalidades, setMensalidades] = useState([]);
   const [carregando, setCarregando] = useState(false);
   const [filtroStatus, setFiltroStatus] = useState('todos'); // todos | pago | pendente
+  const [filtroNome, setFiltroNome] = useState('');
+  const [editando, setEditando] = useState(null); // { tipo: 'reserva'|'mensalidade', item }
 
   const carregar = useCallback(async () => {
     setCarregando(true);
@@ -135,8 +137,14 @@ function RelatorioFinanceiro({ staff, onLogout }) {
 
   useEffect(() => { carregar(); }, [carregar]);
 
-  const reservasFiltradas = reservas.filter((r) => filtroStatus === 'todos' || r.status_pagamento === filtroStatus);
-  const mensalidadesFiltradas = mensalidades.filter((m) => filtroStatus === 'todos' || m.status === filtroStatus);
+  const reservasFiltradas = reservas.filter((r) =>
+    (filtroStatus === 'todos' || r.status_pagamento === filtroStatus) &&
+    (!filtroNome.trim() || r.clientes?.nome?.toLowerCase().includes(filtroNome.trim().toLowerCase()))
+  );
+  const mensalidadesFiltradas = mensalidades.filter((m) =>
+    (filtroStatus === 'todos' || m.status === filtroStatus) &&
+    (!filtroNome.trim() || m.mensalistas?.clientes?.nome?.toLowerCase().includes(filtroNome.trim().toLowerCase()))
+  );
 
   const totalReservasPago = reservas.filter((r) => r.status_pagamento === 'pago').reduce((s, r) => s + Number(r.valor), 0);
   const totalReservasPendente = reservas.filter((r) => r.status_pagamento === 'pendente').reduce((s, r) => s + Number(r.valor), 0);
@@ -171,6 +179,13 @@ function RelatorioFinanceiro({ staff, onLogout }) {
             value={mesReferencia}
             onChange={(e) => setMesReferencia(e.target.value)}
             className="bg-night-panel border border-night-line rounded-lg px-4 py-2 text-areia"
+          />
+          <input
+            type="text"
+            value={filtroNome}
+            onChange={(e) => setFiltroNome(e.target.value)}
+            placeholder="Buscar por nome..."
+            className="bg-night-panel border border-night-line rounded-lg px-3 py-2 text-areia text-sm min-w-[180px]"
           />
           <select
             value={filtroStatus}
@@ -214,7 +229,11 @@ function RelatorioFinanceiro({ staff, onLogout }) {
             <div className="bg-night-panel border border-night-line rounded-2xl divide-y divide-night-line overflow-hidden mb-8">
               {reservasFiltradas.length === 0 && <p className="text-areia-muted text-sm p-4">Nenhuma reserva nesse período/filtro.</p>}
               {reservasFiltradas.map((r) => (
-                <div key={r.id} className="p-3 flex items-center justify-between flex-wrap gap-2 text-sm">
+                <button
+                  key={r.id}
+                  onClick={() => setEditando({ tipo: 'reserva', item: r })}
+                  className="w-full text-left p-3 flex items-center justify-between flex-wrap gap-2 text-sm hover:bg-night-line/30 transition-colors"
+                >
                   <div>
                     <span className="font-semibold">{r.clientes?.nome}</span>
                     <span className="text-areia-muted"> · {r.quadras?.nome} · {r.data.split('-').reverse().join('/')} {r.hora_inicio?.slice(0, 5)}</span>
@@ -227,7 +246,7 @@ function RelatorioFinanceiro({ staff, onLogout }) {
                       {r.status_pagamento === 'pago' ? '✓ Pago' : 'Pendente'}
                     </span>
                   </div>
-                </div>
+                </button>
               ))}
             </div>
 
@@ -236,7 +255,11 @@ function RelatorioFinanceiro({ staff, onLogout }) {
             <div className="bg-night-panel border border-night-line rounded-2xl divide-y divide-night-line overflow-hidden">
               {mensalidadesFiltradas.length === 0 && <p className="text-areia-muted text-sm p-4">Nenhuma mensalidade gerada nesse mês/filtro.</p>}
               {mensalidadesFiltradas.map((m) => (
-                <div key={m.id} className="p-3 flex items-center justify-between flex-wrap gap-2 text-sm">
+                <button
+                  key={m.id}
+                  onClick={() => setEditando({ tipo: 'mensalidade', item: m })}
+                  className="w-full text-left p-3 flex items-center justify-between flex-wrap gap-2 text-sm hover:bg-night-line/30 transition-colors"
+                >
                   <div>
                     <span className="font-semibold">{m.mensalistas?.clientes?.nome}</span>
                     <span className="text-areia-muted"> · {m.mensalistas?.quadras?.nome}</span>
@@ -248,13 +271,127 @@ function RelatorioFinanceiro({ staff, onLogout }) {
                       {m.status === 'pago' ? '✓ Pago' : m.status === 'atrasado' ? 'Atrasado' : m.status === 'isento' ? 'Isento' : 'Pendente'}
                     </span>
                   </div>
-                </div>
+                </button>
               ))}
             </div>
           </>
         )}
       </div>
+
+      {editando && (
+        <EditarPagamentoModal
+          tipo={editando.tipo}
+          item={editando.item}
+          onFechar={() => setEditando(null)}
+          onAtualizado={() => { setEditando(null); carregar(); }}
+        />
+      )}
     </main>
+  );
+}
+
+function EditarPagamentoModal({ tipo, item, onFechar, onAtualizado }) {
+  const [valor, setValor] = useState(item.valor);
+  const [formaPagamento, setFormaPagamento] = useState(item.forma_pagamento || '');
+  const [status, setStatus] = useState(tipo === 'reserva' ? item.status_pagamento : item.status);
+  const [salvando, setSalvando] = useState(false);
+  const [erro, setErro] = useState(null);
+
+  const nomeCliente = tipo === 'reserva' ? item.clientes?.nome : item.mensalistas?.clientes?.nome;
+  const opcoesStatus = tipo === 'reserva'
+    ? [['pendente', 'Pendente'], ['pago', 'Pago']]
+    : [['pendente', 'Pendente'], ['pago', 'Pago'], ['atrasado', 'Atrasado'], ['isento', 'Isento']];
+
+  async function salvar() {
+    setSalvando(true);
+    setErro(null);
+    try {
+      if (tipo === 'reserva') {
+        const { error } = await supabase
+          .from('reservas')
+          .update({ valor, forma_pagamento: formaPagamento || null, status_pagamento: status })
+          .eq('id', item.id);
+        if (error) throw error;
+      } else {
+        const { error } = await supabase
+          .from('mensalidades')
+          .update({
+            valor,
+            forma_pagamento: formaPagamento || null,
+            status,
+            data_pagamento: status === 'pago' ? new Date().toISOString() : null,
+          })
+          .eq('id', item.id);
+        if (error) throw error;
+      }
+      onAtualizado();
+    } catch (e) {
+      setErro(e.message || 'Erro ao salvar.');
+    } finally {
+      setSalvando(false);
+    }
+  }
+
+  return (
+    <div className="fixed inset-0 bg-black/60 flex items-center justify-center p-4 z-50">
+      <div className="bg-night-panel border border-night-line rounded-2xl p-6 w-full max-w-sm">
+        <h3 className="font-display text-xl tracking-wide mb-1">
+          {tipo === 'reserva' ? 'EDITAR PAGAMENTO' : 'EDITAR MENSALIDADE'}
+        </h3>
+        <p className="text-areia-muted text-sm mb-4">{nomeCliente}</p>
+
+        <label className="block mb-3">
+          <span className="text-sm text-areia-muted block mb-1">Valor (R$)</span>
+          <input
+            type="number"
+            step="0.01"
+            value={valor}
+            onChange={(e) => setValor(e.target.value)}
+            className="bg-night border border-night-line rounded-lg px-3 py-2 text-areia w-full"
+          />
+        </label>
+
+        <label className="block mb-3">
+          <span className="text-sm text-areia-muted block mb-1">Forma de pagamento</span>
+          <select
+            value={formaPagamento}
+            onChange={(e) => setFormaPagamento(e.target.value)}
+            className="bg-night border border-night-line rounded-lg px-3 py-2 text-areia w-full"
+          >
+            <option value="">Não informado</option>
+            <option value="dinheiro">Dinheiro</option>
+            <option value="pix">Pix</option>
+            <option value="cartao">Cartão</option>
+            <option value="asaas_online">Asaas (online)</option>
+            {tipo === 'reserva' && <option value="local">A combinar no local</option>}
+          </select>
+        </label>
+
+        <label className="block mb-4">
+          <span className="text-sm text-areia-muted block mb-1">Status</span>
+          <select
+            value={status}
+            onChange={(e) => setStatus(e.target.value)}
+            className="bg-night border border-night-line rounded-lg px-3 py-2 text-areia w-full"
+          >
+            {opcoesStatus.map(([valor, label]) => <option key={valor} value={valor}>{label}</option>)}
+          </select>
+        </label>
+
+        {erro && <p className="text-erro text-sm mb-3">{erro}</p>}
+
+        <div className="flex justify-between gap-3">
+          <button onClick={onFechar} className="text-areia-muted hover:text-areia px-4 py-2 text-sm">Fechar</button>
+          <button
+            onClick={salvar}
+            disabled={salvando}
+            className="bg-coral hover:bg-coral-hover disabled:opacity-30 text-night font-semibold px-6 py-2 rounded-full"
+          >
+            {salvando ? 'Salvando...' : 'Salvar'}
+          </button>
+        </div>
+      </div>
+    </div>
   );
 }
 
