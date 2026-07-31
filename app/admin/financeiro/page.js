@@ -131,7 +131,7 @@ function RelatorioFinanceiro({ staff, onLogout }) {
 
     const { data: mensalidadesDoMes } = await supabase
       .from('mensalidades')
-      .select('id, valor, status, forma_pagamento, data_pagamento, mensalistas(quadras(nome), clientes(nome, telefone))')
+      .select('id, valor, status, forma_pagamento, data_pagamento, clientes(nome, telefone)')
       .eq('mes_referencia', primeiroDiaDoMes(mesReferencia));
 
     setReservas(reservasDoMes || []);
@@ -147,7 +147,7 @@ function RelatorioFinanceiro({ staff, onLogout }) {
   );
   const mensalidadesFiltradas = mensalidades.filter((m) =>
     (filtroStatus === 'todos' || m.status === filtroStatus) &&
-    (!filtroNome.trim() || m.mensalistas?.clientes?.nome?.toLowerCase().includes(filtroNome.trim().toLowerCase()))
+    (!filtroNome.trim() || m.clientes?.nome?.toLowerCase().includes(filtroNome.trim().toLowerCase()))
   );
 
   const totalReservasPago = reservas.filter((r) => r.status_pagamento === 'pago').reduce((s, r) => s + Number(r.valor), 0);
@@ -291,8 +291,8 @@ function RelatorioFinanceiro({ staff, onLogout }) {
                   className="w-full text-left p-3 flex items-center justify-between flex-wrap gap-2 text-sm hover:bg-night-line/30 transition-colors"
                 >
                   <div>
-                    <span className="font-semibold">{m.mensalistas?.clientes?.nome}</span>
-                    <span className="text-areia-muted"> · {m.mensalistas?.quadras?.nome}</span>
+                    <span className="font-semibold">{m.clientes?.nome}</span>
+                    <span className="text-areia-muted"> · Mensalidade</span>
                   </div>
                   <div className="flex items-center gap-2 text-areia-muted">
                     <span>{NOMES_FORMA_PAGAMENTO[m.forma_pagamento] || m.forma_pagamento || '—'}</span>
@@ -327,7 +327,7 @@ function EditarPagamentoModal({ tipo, item, onFechar, onAtualizado }) {
   const [salvando, setSalvando] = useState(false);
   const [erro, setErro] = useState(null);
 
-  const nomeCliente = tipo === 'reserva' ? item.clientes?.nome : item.mensalistas?.clientes?.nome;
+  const nomeCliente = item.clientes?.nome;
   const opcoesStatus = tipo === 'reserva'
     ? [['pendente', 'Pendente'], ['pago', 'Pago']]
     : [['pendente', 'Pendente'], ['pago', 'Pago'], ['atrasado', 'Atrasado'], ['isento', 'Isento']];
