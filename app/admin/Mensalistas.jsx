@@ -45,7 +45,7 @@ export default function Mensalistas({ quadras, modalidades }) {
       .eq('mes_referencia', primeiroDiaDoMes(mesReferencia));
 
     const mapa = {};
-    (pagamentos || []).forEach((p) => { mapa[p.mensalista_id] = p; });
+    (pagamentos || []).forEach((p) => { mapa[p.cliente_id] = p; });
 
     setMensalistas(lista || []);
     setMensalidades(mapa);
@@ -55,21 +55,30 @@ export default function Mensalistas({ quadras, modalidades }) {
   useEffect(() => { carregar(); }, [carregar]);
 
   async function gerarCobrancasDoMes() {
-    const linhas = mensalistas
-      .filter((m) => !mensalidades[m.id])
-      .map((m) => ({
-        mensalista_id: m.id,
+    // Agrupa por cliente e soma o valor de todos os horários fixos ativos dele,
+    // gerando UMA cobrança por cliente (não uma por horário/quadra)
+    const porCliente = {};
+    mensalistas.forEach((m) => {
+      if (!porCliente[m.cliente_id]) porCliente[m.cliente_id] = 0;
+      porCliente[m.cliente_id] += Number(m.valor_mensal);
+    });
+
+    const linhas = Object.entries(porCliente)
+      .filter(([clienteId]) => !mensalidades[clienteId])
+      .map(([clienteId, valorTotal]) => ({
+        cliente_id: clienteId,
         mes_referencia: primeiroDiaDoMes(mesReferencia),
-        valor: m.valor_mensal,
+        valor: valorTotal,
         status: 'pendente',
       }));
+
     if (linhas.length === 0) return;
     await supabase.from('mensalidades').insert(linhas);
     carregar();
   }
 
-  async function alternarPagamento(mensalistaId) {
-    const atual = mensalidades[mensalistaId];
+  async function alternarPagamento(clienteId) {
+    const atual = mensalidades[clienteId];
     if (!atual) return;
     const novoStatus = atual.status === 'pago' ? 'pendente' : 'pago';
     await supabase
@@ -173,29 +182,30 @@ export default function Mensalistas({ quadras, modalidades }) {
             </button>
             <span className="text-areia-muted text-sm"> · {c.telefone}</span>
 
+            {(() => {
+              const pagamento = mensalidades[c.clienteId];
+              return pagamento ? (
+                <button
+                  onClick={() => alternarPagamento(c.clienteId)}
+                  className={`ml-3 text-xs px-3 py-1 rounded-full ${
+                    pagamento.status === 'pago' ? 'bg-sucesso/20 text-sucesso' : 'bg-aviso/20 text-aviso'
+                  }`}
+                >
+                  {pagamento.status === 'pago' ? '✓ Pago' : 'Pendente'} · R$ {Number(pagamento.valor).toFixed(2)}
+                  {c.slots.length > 1 ? ` (${c.slots.length} horários)` : ''}
+                </button>
+              ) : (
+                <span className="ml-3 text-xs text-areia-muted">Sem cobrança gerada</span>
+              );
+            })()}
+
             <div className="mt-2 space-y-1.5">
-              {c.slots.map((m) => {
-                const pagamento = mensalidades[m.id];
-                return (
-                  <div key={m.id} className="flex items-center justify-between flex-wrap gap-2 text-sm bg-night rounded-lg px-3 py-2">
-                    <span className="text-areia-muted">
-                      {m.quadras?.nome} · {NOMES_MODALIDADE[m.modalidade]} · {DIAS_SEMANA[m.dia_semana]} {m.hora_inicio.slice(0, 5)}–{m.hora_fim.slice(0, 5)}
-                    </span>
-                    {pagamento ? (
-                      <button
-                        onClick={() => alternarPagamento(m.id)}
-                        className={`text-xs px-3 py-1 rounded-full ${
-                          pagamento.status === 'pago' ? 'bg-sucesso/20 text-sucesso' : 'bg-aviso/20 text-aviso'
-                        }`}
-                      >
-                        {pagamento.status === 'pago' ? '✓ Pago' : 'Pendente'} · R$ {Number(pagamento.valor).toFixed(2)}
-                      </button>
-                    ) : (
-                      <span className="text-xs text-areia-muted">Sem cobrança gerada</span>
-                    )}
-                  </div>
-                );
-              })}
+              {c.slots.map((m) => (
+                <div key={m.id} className="text-sm bg-night rounded-lg px-3 py-2 text-areia-muted">
+                  {m.quadras?.nome} · {NOMES_MODALIDADE[m.modalidade]} · {DIAS_SEMANA[m.dia_semana]} {m.hora_inicio.slice(0, 5)}–{m.hora_fim.slice(0, 5)}
+                  <span className="text-areia-muted/70"> · R$ {Number(m.valor_mensal).toFixed(2)}</span>
+                </div>
+              ))}
             </div>
           </div>
         ))}
