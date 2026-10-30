@@ -76,16 +76,29 @@ function TelaLogin({ onEntrar }) {
 
   return (
     <main className="min-h-screen flex items-center justify-center px-4 bg-night text-areia">
-      <div className="bg-night-panel border border-night-line rounded-2xl p-8 w-full max-w-sm">
-        <h1 className="font-display text-3xl tracking-wide mb-1">FINANCEIRO</h1>
+      <div className="w-full max-w-sm">
+        <div className="flex items-center gap-2.5 justify-center mb-6">
+          <svg width="30" height="30" viewBox="0 0 24 24" fill="none" className="text-coral shrink-0">
+            <rect x="3" y="3" width="18" height="18" rx="4" stroke="currentColor" strokeWidth="1.75" />
+            <path d="M3 9h18M9 21V9" stroke="currentColor" strokeWidth="1.75" />
+          </svg>
+          <div className="leading-tight text-left">
+            <p className="font-display text-2xl tracking-wide">AREIA</p>
+            <p className="text-[11px] text-areia-muted -mt-1">Gestão de quadras</p>
+          </div>
+        </div>
+
+        <div className="bg-night-panel border border-night-line rounded-2xl p-8">
+        <h1 className="font-display text-2xl tracking-wide mb-1">FINANCEIRO</h1>
         <p className="text-areia-muted text-sm mb-6">Digite seu código de acesso</p>
         <input
           type="password"
           value={codigo}
           onChange={(e) => setCodigo(e.target.value)}
           onKeyDown={(e) => e.key === 'Enter' && entrar()}
-          className="bg-night border border-night-line rounded-lg px-4 py-3 text-areia w-full mb-3"
+          className="bg-night border border-night-line rounded-lg px-4 py-3 text-areia w-full mb-3 focus:border-coral outline-none transition-colors"
           placeholder="Código de acesso"
+          autoFocus
         />
         {erro && <p className="text-erro text-sm mb-3">{erro}</p>}
         <button
@@ -95,6 +108,7 @@ function TelaLogin({ onEntrar }) {
         >
           {verificando ? 'Verificando...' : 'Entrar'}
         </button>
+        </div>
       </div>
     </main>
   );
@@ -169,12 +183,21 @@ function RelatorioFinanceiro({ staff, onLogout }) {
   return (
     <main className="min-h-screen px-4 py-8 md:px-8 bg-night text-areia">
       <div className="max-w-5xl mx-auto">
-        <div className="flex items-center justify-between mb-6">
-          <div>
-            <h1 className="font-display text-3xl tracking-wide">FINANCEIRO</h1>
-            <p className="text-areia-muted text-sm">Olá, {staff.nome}</p>
+        <div className="flex items-center justify-between mb-6 flex-wrap gap-3">
+          <div className="flex items-center gap-2.5">
+            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" className="text-coral shrink-0">
+              <rect x="3" y="3" width="18" height="18" rx="4" stroke="currentColor" strokeWidth="1.75" />
+              <path d="M3 9h18M9 21V9" stroke="currentColor" strokeWidth="1.75" />
+            </svg>
+            <div>
+              <h1 className="font-display text-2xl tracking-wide leading-none">FINANCEIRO</h1>
+              <p className="text-areia-muted text-xs mt-1">Olá, {staff.nome}</p>
+            </div>
           </div>
-          <button onClick={onLogout} className="text-areia-muted hover:text-areia text-sm">Sair</button>
+          <div className="flex items-center gap-4">
+            <a href="/admin" className="text-areia-muted hover:text-areia text-sm transition-colors">← Painel do balcão</a>
+            <button onClick={onLogout} className="text-areia-muted hover:text-areia text-sm transition-colors">Sair</button>
+          </div>
         </div>
 
         <div className="flex items-center gap-3 mb-3 flex-wrap">
@@ -427,9 +450,11 @@ function EditarPagamentoModal({ tipo, item, onFechar, onAtualizado }) {
 
 function CartaoResumo({ titulo, valor, sub, cor }) {
   const corTexto = cor === 'sucesso' ? 'text-sucesso' : cor === 'aviso' ? 'text-aviso' : 'text-areia';
+  const corBarra = cor === 'sucesso' ? 'bg-sucesso' : cor === 'aviso' ? 'bg-aviso' : 'bg-coral';
   return (
-    <div className="bg-night-panel border border-night-line rounded-xl p-4">
-      <p className="text-areia-muted text-xs mb-1">{titulo}</p>
+    <div className="bg-night-panel border border-night-line rounded-xl p-4 relative overflow-hidden">
+      <span className={`absolute top-0 left-0 right-0 h-0.5 ${corBarra}`} />
+      <p className="text-areia-muted text-xs mb-1.5">{titulo}</p>
       <p className={`font-display text-2xl tracking-wide ${corTexto}`}>{formatarMoeda(valor)}</p>
       {sub && <p className="text-areia-muted text-xs mt-1">{sub}</p>}
     </div>

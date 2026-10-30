@@ -102,11 +102,16 @@ export default function Churrasqueiras() {
 
   return (
     <div>
-      <div className="flex items-center gap-4 mb-1">
-        <button onClick={() => mudarDia(-1)} className="w-9 h-9 flex items-center justify-center rounded-full border border-night-line hover:border-areia-muted text-lg">‹</button>
+      <div className="flex items-center gap-3 mb-1">
+        <button onClick={() => mudarDia(-1)} className="w-9 h-9 flex items-center justify-center rounded-full border border-night-line hover:border-areia-muted text-lg transition-colors">‹</button>
         <div className="relative">
-          <button onClick={() => setMostrarCalendario((v) => !v)} className="font-display text-2xl tracking-wide px-2">
-            {ehHoje ? 'HOJE' : formatarDataExtenso(data)}
+          <button onClick={() => setMostrarCalendario((v) => !v)} className="text-left">
+            <span className="font-display text-2xl tracking-wide block leading-none">
+              {ehHoje ? 'HOJE' : formatarDataExtenso(data)}
+            </span>
+            <span className="text-areia-muted text-xs">
+              {DIAS_SEMANA[new Date(`${data}T00:00:00`).getDay()]}-feira{ehHoje ? ` · ${formatarDataExtenso(data)}` : ''}
+            </span>
           </button>
           {mostrarCalendario && (
             <input
@@ -119,10 +124,9 @@ export default function Churrasqueiras() {
             />
           )}
         </div>
-        <button onClick={() => mudarDia(1)} className="w-9 h-9 flex items-center justify-center rounded-full border border-night-line hover:border-areia-muted text-lg">›</button>
+        <button onClick={() => mudarDia(1)} className="w-9 h-9 flex items-center justify-center rounded-full border border-night-line hover:border-areia-muted text-lg transition-colors">›</button>
       </div>
-      <p className="text-areia-muted text-sm mb-2">{DIAS_SEMANA[new Date(`${data}T00:00:00`).getDay()]}-feira · {formatarDataExtenso(data)}</p>
-      <p className="text-areia-muted text-xs mb-6">Clique nos horários livres pra reservar a churrasqueira (pode selecionar vários horários de uma vez).</p>
+      <p className="text-areia-muted text-xs mt-3 mb-6">Clique nos horários livres pra reservar a churrasqueira (pode selecionar vários horários de uma vez).</p>
 
       {carregando && <p className="text-areia-muted mb-4">Carregando...</p>}
       {!carregando && slots.length === 0 && <p className="text-aviso text-sm mb-4">Fechado nesse dia.</p>}
@@ -181,7 +185,7 @@ export default function Churrasqueiras() {
       )}
 
       {selecionados.size > 0 && (
-        <div className="fixed bottom-0 left-0 right-0 bg-night-panel border-t border-night-line p-4 flex items-center justify-between z-30">
+        <div className="fixed bottom-0 left-0 right-0 md:left-64 bg-night-panel border-t border-night-line p-4 flex items-center justify-between z-30">
           <span className="text-sm text-areia-muted">
             {selecionados.size} horário{selecionados.size > 1 ? 's' : ''} selecionado{selecionados.size > 1 ? 's' : ''}
           </span>

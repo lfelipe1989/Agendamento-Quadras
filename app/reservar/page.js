@@ -25,11 +25,18 @@ export default async function ReservarPage() {
   return (
     <main className="min-h-screen px-4 py-10 md:px-8">
       <div className="max-w-2xl mx-auto">
+        <div className="flex items-center gap-2.5 mb-8">
+          <svg width="28" height="28" viewBox="0 0 24 24" fill="none" className="text-coral shrink-0">
+            <rect x="3" y="3" width="18" height="18" rx="4" stroke="currentColor" strokeWidth="1.75" />
+            <path d="M3 9h18M9 21V9" stroke="currentColor" strokeWidth="1.75" />
+          </svg>
+          <span className="font-display text-xl tracking-wide">AREIA</span>
+        </div>
         <h1 className="font-display text-4xl md:text-5xl tracking-wide mb-2">
           RESERVAR QUADRA
         </h1>
-        <p className="text-areia-muted mb-8">
-          Escolha a quadra, a modalidade e o horário. Simples assim.
+        <p className="text-areia-muted mb-10">
+          Escolha a data, o horário e a quadra. Leva menos de um minuto.
         </p>
         {erro && (
           <div className="bg-erro/10 border border-erro rounded-xl p-4 mb-6 text-sm">

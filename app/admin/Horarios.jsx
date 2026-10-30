@@ -102,7 +102,7 @@ export default function Horarios() {
 
   return (
     <div>
-      <h2 className="font-display text-2xl tracking-wide mb-2">PREÇOS POR MODALIDADE</h2>
+      <h2 className="font-display text-xl tracking-wide mb-1.5 text-areia-muted">PREÇOS POR MODALIDADE</h2>
       <p className="text-areia-muted text-sm mb-4">
         Valor da hora avulsa, diurno e noturno, por modalidade. É o que aparece pro cliente no link de reserva — vale pra qualquer uma das 3 quadras.
       </p>
@@ -172,7 +172,7 @@ export default function Horarios() {
         </div>
       )}
 
-      <h2 className="font-display text-2xl tracking-wide mb-2">HORÁRIO DE FUNCIONAMENTO</h2>
+      <h2 className="font-display text-xl tracking-wide mb-1.5 text-areia-muted">HORÁRIO DE FUNCIONAMENTO</h2>
       <p className="text-areia-muted text-sm mb-6">
         Defina o horário de abertura e fechamento de cada dia da semana. Isso controla quais horários aparecem disponíveis pro cliente no link de reserva.
       </p>

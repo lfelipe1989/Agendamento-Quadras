@@ -10,10 +10,12 @@ module.exports = {
           DEFAULT: '#0B2027',   // fundo principal, verde-petróleo escuro (noite de praia)
           panel: '#123339',     // cards e painéis
           line: '#1E4A50',      // divisores, linhas de "quadra"
+          raised: '#17424A',    // hover / item ativo / superfície elevada
+          sidebar: '#081A1F',   // chrome estrutural (sidebar, topbar) — um tom mais escuro que o conteúdo
         },
         areia: {
           DEFAULT: '#EDE4D0',   // texto claro / fundo alternativo
-          muted: '#B9AF98',     // texto secundário sobre fundo escuro
+          muted: '#9FB3B5',     // texto secundário sobre fundo escuro (neutro frio, mais legível que um bege apagado)
         },
         coral: {
           DEFAULT: '#FF6B4A',   // CTA principal

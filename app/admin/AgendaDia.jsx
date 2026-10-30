@@ -96,42 +96,53 @@ export default function AgendaDia({ quadras, modalidades, horaInicioNoturno }) {
 
   return (
     <div>
-      <div className="flex items-center gap-4 mb-1">
-        <button
-          onClick={() => mudarDia(-1)}
-          className="w-9 h-9 flex items-center justify-center rounded-full border border-night-line hover:border-areia-muted text-lg"
-        >
-          ‹
-        </button>
-        <div className="relative">
+      <div className="flex flex-wrap items-center justify-between gap-4 mb-6">
+        <div className="flex items-center gap-3">
           <button
-            onClick={() => setMostrarCalendario((v) => !v)}
-            className="font-display text-2xl tracking-wide px-2"
+            onClick={() => mudarDia(-1)}
+            className="w-9 h-9 flex items-center justify-center rounded-full border border-night-line hover:border-areia-muted text-lg transition-colors"
+            aria-label="Dia anterior"
           >
-            {ehHoje ? 'HOJE' : formatarDataExtenso(data)}
+            ‹
           </button>
-          {mostrarCalendario && (
-            <input
-              type="date"
-              value={data}
-              autoFocus
-              onChange={(e) => { setData(e.target.value); setMostrarCalendario(false); }}
-              onBlur={() => setMostrarCalendario(false)}
-              className="absolute top-full left-0 mt-1 z-10 bg-night-panel border border-night-line rounded-lg px-3 py-2 text-areia"
-            />
-          )}
+          <div className="relative">
+            <button
+              onClick={() => setMostrarCalendario((v) => !v)}
+              className="text-left"
+            >
+              <span className="font-display text-2xl tracking-wide block leading-none">
+                {ehHoje ? 'HOJE' : formatarDataExtenso(data)}
+              </span>
+              <span className="text-areia-muted text-xs">
+                {DIAS_SEMANA[new Date(`${data}T00:00:00`).getDay()]}-feira{ehHoje ? ` · ${formatarDataExtenso(data)}` : ''}
+              </span>
+            </button>
+            {mostrarCalendario && (
+              <input
+                type="date"
+                value={data}
+                autoFocus
+                onChange={(e) => { setData(e.target.value); setMostrarCalendario(false); }}
+                onBlur={() => setMostrarCalendario(false)}
+                className="absolute top-full left-0 mt-1 z-10 bg-night-panel border border-night-line rounded-lg px-3 py-2 text-areia"
+              />
+            )}
+          </div>
+          <button
+            onClick={() => mudarDia(1)}
+            className="w-9 h-9 flex items-center justify-center rounded-full border border-night-line hover:border-areia-muted text-lg transition-colors"
+            aria-label="Próximo dia"
+          >
+            ›
+          </button>
         </div>
-        <button
-          onClick={() => mudarDia(1)}
-          className="w-9 h-9 flex items-center justify-center rounded-full border border-night-line hover:border-areia-muted text-lg"
-        >
-          ›
-        </button>
+
+        {ehPassado && (
+          <span className="flex items-center gap-1.5 text-xs text-areia-muted bg-night-panel border border-night-line rounded-full px-3 py-1.5">
+            🔒 Histórico — somente visualização
+          </span>
+        )}
       </div>
-      <p className="text-areia-muted text-sm mb-6">
-        {DIAS_SEMANA[new Date(`${data}T00:00:00`).getDay()]}-feira · {formatarDataExtenso(data)}
-        {ehPassado && <span className="ml-2 text-areia-muted/70">· 🔒 histórico (somente visualização)</span>}
-      </p>
 
       {carregando && <p className="text-areia-muted mb-4">Carregando...</p>}
 
@@ -146,22 +157,23 @@ export default function AgendaDia({ quadras, modalidades, horaInicioNoturno }) {
             style={{ gridTemplateColumns: `70px repeat(${quadras.length}, 1fr)` }}
           >
             {/* cabeçalho */}
-            <div className="border-b border-r border-night-line p-2" />
+            <div className="sticky top-0 z-10 bg-night-panel border-b border-r border-night-line p-2" />
             {quadras.map((q) => (
-              <div key={q.id} className="border-b border-night-line p-2 text-center font-semibold text-sm">
+              <div key={q.id} className="sticky top-0 z-10 bg-night-panel border-b border-night-line p-2.5 text-center font-semibold text-sm">
                 {q.nome}
               </div>
             ))}
 
             {/* linhas de horário */}
-            {slots.map((slot) => (
+            {slots.map((slot, i) => (
               <div key={slot.hora_inicio} className="contents">
-                <div className="border-r border-b border-night-line p-2 text-xs text-areia-muted flex items-start">
+                <div className={`border-r border-b border-night-line p-2 text-xs text-areia-muted flex items-start ${i % 2 === 1 ? 'bg-night/40' : ''}`}>
                   {slot.hora_inicio}
                 </div>
                 {quadras.map((q) => {
                   const item = itensPorQuadra[q.id]?.[slot.hora_inicio];
                   const cor = corModalidade(item);
+                  const clicavel = item || !ehPassado;
                   return (
                     <button
                       key={q.id}
@@ -172,11 +184,13 @@ export default function AgendaDia({ quadras, modalidades, horaInicioNoturno }) {
                       }
                       style={
                         item
-                          ? { backgroundColor: `${cor}26`, borderLeft: `3px solid ${cor}`, color: cor }
+                          ? { backgroundColor: `${cor}22`, borderLeft: `3px solid ${cor}`, color: cor }
                           : undefined
                       }
-                      className={`border-b border-night-line p-2 text-left text-xs min-h-[52px] transition-colors ${
-                        !item ? 'hover:bg-night-line/40' : ''
+                      className={`group border-b border-night-line p-2 text-left text-xs min-h-[52px] transition-colors ${
+                        item ? 'hover:brightness-125' : i % 2 === 1 ? 'bg-night/40' : ''
+                      } ${!item && !ehPassado ? 'hover:bg-night-raised cursor-pointer' : ''} ${
+                        !item && ehPassado ? 'cursor-default' : ''
                       }`}
                     >
                       {item ? (
@@ -184,7 +198,7 @@ export default function AgendaDia({ quadras, modalidades, horaInicioNoturno }) {
                           <div className="font-semibold truncate">
                             {item.tipo === 'evento' ? (item.eventos?.nome_responsavel || 'Evento') : item.clientes?.nome}
                           </div>
-                          <div className="opacity-90 truncate flex items-center gap-1">
+                          <div className="opacity-90 truncate flex items-center gap-1.5">
                             <span>
                               {item.tipo === 'mensalista'
                                 ? (item.alteradoHoje ? 'Mensalista (alterado hoje)' : 'Mensalista')
@@ -194,9 +208,10 @@ export default function AgendaDia({ quadras, modalidades, horaInicioNoturno }) {
                             </span>
                             {item.tipo === 'avulsa' && (
                               <span
-                                className={`text-[10px] px-1 rounded-full ${
-                                  item.status_pagamento === 'pago' ? 'bg-sucesso/30 text-sucesso' : 'bg-aviso/30 text-aviso'
+                                className={`inline-flex items-center justify-center w-3.5 h-3.5 rounded-full text-[9px] shrink-0 ${
+                                  item.status_pagamento === 'pago' ? 'bg-sucesso text-night' : 'bg-aviso text-night'
                                 }`}
+                                title={item.status_pagamento === 'pago' ? 'Pago' : 'Pendente'}
                               >
                                 {item.status_pagamento === 'pago' ? '✓' : '!'}
                               </span>
@@ -204,7 +219,9 @@ export default function AgendaDia({ quadras, modalidades, horaInicioNoturno }) {
                           </div>
                         </>
                       ) : (
-                        <span className="text-areia-muted/30">livre</span>
+                        <span className={`text-areia-muted/30 ${!ehPassado ? 'group-hover:text-areia-muted/60' : ''}`}>
+                          {ehPassado ? '—' : 'livre'}
+                        </span>
                       )}
                     </button>
                   );

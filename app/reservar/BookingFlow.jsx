@@ -158,11 +158,18 @@ export default function BookingFlow({ quadras, modalidades, horaInicioNoturno })
   if (reservaConfirmada) {
     return (
       <div className="bg-night-panel border border-night-line rounded-2xl p-8 text-center">
+        <div className="w-14 h-14 rounded-full bg-sucesso/15 flex items-center justify-center mx-auto mb-4">
+          <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="text-sucesso">
+            <path d="M20 6L9 17l-5-5" />
+          </svg>
+        </div>
         <p className="text-sucesso font-display text-3xl tracking-wide mb-3">RESERVA CONFIRMADA</p>
-        <p className="text-areia-muted mb-1">
-          {nomeQuadra} · {NOMES_MODALIDADE[modalidade]} · {data.split('-').reverse().join('/')} às {horarioEscolhido.hora_inicio}
-        </p>
-        <p className="text-areia-muted">Pagamento no local — {telefone}</p>
+        <div className="inline-flex flex-col gap-1 text-left bg-night rounded-xl px-5 py-4 mb-4">
+          <p><span className="text-areia-muted">Quadra:</span> <span className="font-semibold">{nomeQuadra}</span></p>
+          <p><span className="text-areia-muted">Modalidade:</span> <span className="font-semibold">{NOMES_MODALIDADE[modalidade]}</span></p>
+          <p><span className="text-areia-muted">Quando:</span> <span className="font-semibold">{data.split('-').reverse().join('/')} às {horarioEscolhido.hora_inicio}</span></p>
+        </div>
+        <p className="text-areia-muted text-sm">Pagamento no local — confirmamos no WhatsApp {telefone}</p>
       </div>
     );
   }
@@ -180,7 +187,7 @@ export default function BookingFlow({ quadras, modalidades, horaInicioNoturno })
               min={hoje}
               value={data}
               onChange={(e) => setData(e.target.value)}
-              className="bg-night border border-night-line rounded-lg px-4 py-3 text-areia w-full mb-4"
+              className="bg-night border border-night-line rounded-lg px-4 py-3 text-areia w-full mb-4 focus:border-coral outline-none transition-colors"
             />
             {diaFechado && (
               <p className="text-aviso text-sm mb-4">Fechado nesse dia. Escolha outra data.</p>
@@ -353,19 +360,31 @@ export default function BookingFlow({ quadras, modalidades, horaInicioNoturno })
 }
 
 function Stepper({ etapaAtual }) {
+  const progresso = ETAPAS.length > 1 ? (etapaAtual / (ETAPAS.length - 1)) * 100 : 0;
   return (
-    <div className="relative flex justify-between items-center">
-      <div className="absolute left-0 right-0 top-1/2 h-px bg-night-line -translate-y-1/2" />
-      {ETAPAS.map((label, i) => (
-        <div key={label} className="relative flex flex-col items-center gap-1 bg-night px-1">
-          <div
-            className={`w-2.5 h-2.5 rounded-full ${i <= etapaAtual ? 'bg-coral' : 'bg-night-line'}`}
-          />
-          <span className={`text-[11px] hidden sm:block ${i === etapaAtual ? 'text-areia' : 'text-areia-muted'}`}>
-            {label}
-          </span>
-        </div>
-      ))}
+    <div>
+      <div className="relative flex justify-between items-center">
+        <div className="absolute left-0 right-0 top-1/2 h-px bg-night-line -translate-y-1/2" />
+        <div
+          className="absolute left-0 top-1/2 h-px bg-coral -translate-y-1/2 transition-all duration-300"
+          style={{ width: `${progresso}%` }}
+        />
+        {ETAPAS.map((label, i) => (
+          <div key={label} className="relative flex flex-col items-center gap-1.5 bg-night px-1">
+            <div
+              className={`w-2.5 h-2.5 rounded-full transition-colors ${
+                i < etapaAtual ? 'bg-coral' : i === etapaAtual ? 'bg-coral ring-4 ring-coral/20' : 'bg-night-line'
+              }`}
+            />
+            <span className={`text-[11px] hidden sm:block ${i === etapaAtual ? 'text-areia font-medium' : 'text-areia-muted'}`}>
+              {label}
+            </span>
+          </div>
+        ))}
+      </div>
+      <p className="text-areia-muted text-xs mt-2 sm:hidden">
+        Etapa {etapaAtual + 1} de {ETAPAS.length} · {ETAPAS[etapaAtual]}
+      </p>
     </div>
   );
 }
@@ -378,7 +397,7 @@ function Campo({ label, value, onChange }) {
         type="text"
         value={value}
         onChange={(e) => onChange(e.target.value)}
-        className="bg-night border border-night-line rounded-lg px-4 py-3 text-areia w-full"
+        className="bg-night border border-night-line rounded-lg px-4 py-3 text-areia w-full focus:border-coral outline-none transition-colors"
       />
     </label>
   );

@@ -123,30 +123,30 @@ export default function Mensalistas({ quadras, modalidades }) {
           type="month"
           value={mesReferencia}
           onChange={(e) => setMesReferencia(e.target.value)}
-          className="bg-night-panel border border-night-line rounded-lg px-4 py-2 text-areia"
+          className="bg-night-panel border border-night-line rounded-lg px-4 py-2 text-areia focus:border-coral outline-none transition-colors"
         />
         <div className="flex gap-2">
-          <button onClick={gerarCobrancasDoMes} className="bg-night-panel border border-night-line hover:border-areia-muted text-sm px-4 py-2 rounded-full">
+          <button onClick={gerarCobrancasDoMes} className="bg-night-panel border border-night-line hover:border-areia-muted text-sm px-4 py-2 rounded-full transition-colors">
             Gerar cobranças do mês
           </button>
-          <button onClick={() => setMostrarForm(true)} className="bg-coral hover:bg-coral-hover text-night font-semibold text-sm px-4 py-2 rounded-full">
+          <button onClick={() => setMostrarForm(true)} className="bg-coral hover:bg-coral-hover text-night font-semibold text-sm px-4 py-2 rounded-full transition-colors">
             + Novo mensalista
           </button>
         </div>
       </div>
 
-      <div className="flex items-center gap-2 mb-6 flex-wrap">
+      <div className="flex items-center gap-2 mb-6 flex-wrap bg-night-panel border border-night-line rounded-xl px-3 py-2.5">
         <input
           type="text"
           value={filtroNome}
           onChange={(e) => setFiltroNome(e.target.value)}
           placeholder="Buscar por nome..."
-          className="bg-night-panel border border-night-line rounded-lg px-3 py-1.5 text-areia text-sm flex-1 min-w-[180px]"
+          className="bg-night border border-night-line rounded-lg px-3 py-1.5 text-areia text-sm flex-1 min-w-[180px] focus:border-coral outline-none transition-colors"
         />
         <select
           value={filtroDia}
           onChange={(e) => setFiltroDia(e.target.value)}
-          className="bg-night-panel border border-night-line rounded-lg px-3 py-1.5 text-areia text-sm"
+          className="bg-night border border-night-line rounded-lg px-3 py-1.5 text-areia text-sm"
         >
           <option value="todos">Todos os dias</option>
           {DIAS_SEMANA.map((d, i) => <option key={i} value={i}>{d}</option>)}
@@ -154,7 +154,7 @@ export default function Mensalistas({ quadras, modalidades }) {
         <select
           value={filtroModalidade}
           onChange={(e) => setFiltroModalidade(e.target.value)}
-          className="bg-night-panel border border-night-line rounded-lg px-3 py-1.5 text-areia text-sm"
+          className="bg-night border border-night-line rounded-lg px-3 py-1.5 text-areia text-sm"
         >
           <option value="todos">Todas as modalidades</option>
           {modalidades.map((m) => <option key={m.modalidade} value={m.modalidade}>{NOMES_MODALIDADE[m.modalidade]}</option>)}
@@ -171,41 +171,50 @@ export default function Mensalistas({ quadras, modalidades }) {
 
       {carregando && <p className="text-areia-muted">Carregando...</p>}
 
-      <div className="space-y-3">
+      <div className="space-y-2.5">
         {listaClientes.map((c) => (
-          <div key={c.clienteId} className="bg-night-panel border border-night-line rounded-xl p-4">
-            <button
-              onClick={() => setClienteEditando({ clienteId: c.clienteId, nome: c.nome, telefone: c.telefone })}
-              className="font-semibold hover:text-coral transition-colors text-left"
-            >
-              {c.nome}
-            </button>
-            <span className="text-areia-muted text-sm"> · {c.telefone}</span>
+          <div key={c.clienteId} className="bg-night-panel border border-night-line rounded-xl p-4 hover:border-areia-muted/40 transition-colors">
+            <div className="flex items-start gap-3">
+              <div className="w-9 h-9 rounded-full bg-night-raised border border-night-line flex items-center justify-center text-sm font-semibold text-areia-muted shrink-0">
+                {(c.nome || '?').trim().charAt(0).toUpperCase()}
+              </div>
+              <div className="min-w-0 flex-1">
+                <div className="flex items-center flex-wrap gap-x-3 gap-y-1.5">
+                  <button
+                    onClick={() => setClienteEditando({ clienteId: c.clienteId, nome: c.nome, telefone: c.telefone })}
+                    className="font-semibold hover:text-coral transition-colors text-left"
+                  >
+                    {c.nome}
+                  </button>
+                  <span className="text-areia-muted text-sm">{c.telefone}</span>
 
-            {(() => {
-              const pagamento = mensalidades[c.clienteId];
-              return pagamento ? (
-                <button
-                  onClick={() => alternarPagamento(c.clienteId)}
-                  className={`ml-3 text-xs px-3 py-1 rounded-full ${
-                    pagamento.status === 'pago' ? 'bg-sucesso/20 text-sucesso' : 'bg-aviso/20 text-aviso'
-                  }`}
-                >
-                  {pagamento.status === 'pago' ? '✓ Pago' : 'Pendente'} · R$ {Number(pagamento.valor).toFixed(2)}
-                  {c.slots.length > 1 ? ` (${c.slots.length} horários)` : ''}
-                </button>
-              ) : (
-                <span className="ml-3 text-xs text-areia-muted">Sem cobrança gerada</span>
-              );
-            })()}
-
-            <div className="mt-2 space-y-1.5">
-              {c.slots.map((m) => (
-                <div key={m.id} className="text-sm bg-night rounded-lg px-3 py-2 text-areia-muted">
-                  {m.quadras?.nome} · {NOMES_MODALIDADE[m.modalidade]} · {DIAS_SEMANA[m.dia_semana]} {m.hora_inicio.slice(0, 5)}–{m.hora_fim.slice(0, 5)}
-                  <span className="text-areia-muted/70"> · R$ {Number(m.valor_mensal).toFixed(2)}</span>
+                  {(() => {
+                    const pagamento = mensalidades[c.clienteId];
+                    return pagamento ? (
+                      <button
+                        onClick={() => alternarPagamento(c.clienteId)}
+                        className={`text-xs px-3 py-1 rounded-full transition-colors ${
+                          pagamento.status === 'pago' ? 'bg-sucesso/20 text-sucesso hover:bg-sucesso/30' : 'bg-aviso/20 text-aviso hover:bg-aviso/30'
+                        }`}
+                      >
+                        {pagamento.status === 'pago' ? '✓ Pago' : 'Pendente'} · R$ {Number(pagamento.valor).toFixed(2)}
+                        {c.slots.length > 1 ? ` (${c.slots.length} horários)` : ''}
+                      </button>
+                    ) : (
+                      <span className="text-xs text-areia-muted">Sem cobrança gerada</span>
+                    );
+                  })()}
                 </div>
-              ))}
+
+                <div className="mt-2.5 space-y-1.5">
+                  {c.slots.map((m) => (
+                    <div key={m.id} className="text-sm bg-night rounded-lg px-3 py-2 text-areia-muted">
+                      {m.quadras?.nome} · {NOMES_MODALIDADE[m.modalidade]} · {DIAS_SEMANA[m.dia_semana]} {m.hora_inicio.slice(0, 5)}–{m.hora_fim.slice(0, 5)}
+                      <span className="text-areia-muted/70"> · R$ {Number(m.valor_mensal).toFixed(2)}</span>
+                    </div>
+                  ))}
+                </div>
+              </div>
             </div>
           </div>
         ))}

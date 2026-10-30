@@ -110,19 +110,24 @@ export default function Eventos({ quadras, modalidades }) {
 
   return (
     <div>
-      <div className="flex items-center gap-4 mb-1">
+      <div className="flex items-center gap-3 mb-1">
         <button
           onClick={() => mudarDia(-1)}
-          className="w-9 h-9 flex items-center justify-center rounded-full border border-night-line hover:border-areia-muted text-lg"
+          className="w-9 h-9 flex items-center justify-center rounded-full border border-night-line hover:border-areia-muted text-lg transition-colors"
         >
           ‹
         </button>
         <div className="relative">
           <button
             onClick={() => setMostrarCalendario((v) => !v)}
-            className="font-display text-2xl tracking-wide px-2"
+            className="text-left"
           >
-            {ehHoje ? 'HOJE' : formatarDataExtenso(data)}
+            <span className="font-display text-2xl tracking-wide block leading-none">
+              {ehHoje ? 'HOJE' : formatarDataExtenso(data)}
+            </span>
+            <span className="text-areia-muted text-xs">
+              {DIAS_SEMANA[new Date(`${data}T00:00:00`).getDay()]}-feira{ehHoje ? ` · ${formatarDataExtenso(data)}` : ''}
+            </span>
           </button>
           {mostrarCalendario && (
             <input
@@ -137,13 +142,12 @@ export default function Eventos({ quadras, modalidades }) {
         </div>
         <button
           onClick={() => mudarDia(1)}
-          className="w-9 h-9 flex items-center justify-center rounded-full border border-night-line hover:border-areia-muted text-lg"
+          className="w-9 h-9 flex items-center justify-center rounded-full border border-night-line hover:border-areia-muted text-lg transition-colors"
         >
           ›
         </button>
       </div>
-      <p className="text-areia-muted text-sm mb-2">{DIAS_SEMANA[new Date(`${data}T00:00:00`).getDay()]}-feira · {formatarDataExtenso(data)}</p>
-      <p className="text-areia-muted text-xs mb-6">Clique nos horários livres que o evento vai usar (pode marcar várias quadras e horários ao mesmo tempo).</p>
+      <p className="text-areia-muted text-xs mt-3 mb-6">Clique nos horários livres que o evento vai usar (pode marcar várias quadras e horários ao mesmo tempo).</p>
 
       {carregando && <p className="text-areia-muted mb-4">Carregando...</p>}
 
@@ -222,7 +226,7 @@ export default function Eventos({ quadras, modalidades }) {
       )}
 
       {selecionados.size > 0 && (
-        <div className="fixed bottom-0 left-0 right-0 bg-night-panel border-t border-night-line p-4 flex items-center justify-between z-30">
+        <div className="fixed bottom-0 left-0 right-0 md:left-64 bg-night-panel border-t border-night-line p-4 flex items-center justify-between z-30">
           <span className="text-sm text-areia-muted">
             {selecionados.size} horário{selecionados.size > 1 ? 's' : ''} selecionado{selecionados.size > 1 ? 's' : ''}
           </span>

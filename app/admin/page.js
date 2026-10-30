@@ -8,6 +8,15 @@ import Eventos from './Eventos';
 import Churrasqueiras from './Churrasqueiras';
 import Mensalistas from './Mensalistas';
 import Horarios from './Horarios';
+import AdminShell from './AdminShell';
+
+const TITULOS_ABA = {
+  agenda: 'Agenda do dia',
+  mensalistas: 'Mensalistas',
+  eventos: 'Eventos',
+  churrasqueiras: 'Churrasqueiras',
+  horarios: 'Horários',
+};
 
 export default function AdminPage() {
   const [staff, setStaff] = useState(null);
@@ -46,62 +55,19 @@ export default function AdminPage() {
   }
 
   return (
-    <main className="min-h-screen px-4 py-8 md:px-8 bg-night text-areia">
-      <div className="max-w-5xl mx-auto">
-        <div className="flex items-start justify-between mb-6">
-          <div>
-            <h1 className="font-display text-3xl tracking-wide">PAINEL DO BALCÃO</h1>
-            <p className="text-areia-muted text-sm">Olá, {staff.nome}</p>
-          </div>
-          <div className="flex flex-col items-end gap-2">
-            <button onClick={fazerLogout} className="text-areia-muted hover:text-areia text-sm">
-              Sair
-            </button>
-            <button
-              onClick={() => setAba('eventos')}
-              className={`text-xs px-3 py-1.5 rounded-full border ${
-                aba === 'eventos' ? 'border-coral text-coral' : 'border-night-line text-areia-muted hover:text-areia'
-              }`}
-            >
-              Eventos
-            </button>
-            <button
-              onClick={() => setAba('churrasqueiras')}
-              className={`text-xs px-3 py-1.5 rounded-full border ${
-                aba === 'churrasqueiras' ? 'border-coral text-coral' : 'border-night-line text-areia-muted hover:text-areia'
-              }`}
-            >
-              Churrasqueiras
-            </button>
-          </div>
-        </div>
-
-        <div className="flex gap-2 mb-6">
-          <BotaoAba ativo={aba === 'agenda'} onClick={() => setAba('agenda')}>Agenda do dia</BotaoAba>
-          <BotaoAba ativo={aba === 'mensalistas'} onClick={() => setAba('mensalistas')}>Mensalistas</BotaoAba>
-          <BotaoAba ativo={aba === 'horarios'} onClick={() => setAba('horarios')}>Horários</BotaoAba>
-        </div>
-
-        {aba === 'agenda' && <AgendaDia quadras={quadras} modalidades={modalidades} horaInicioNoturno={horaInicioNoturno} />}
-        {aba === 'eventos' && <Eventos quadras={quadras} modalidades={modalidades} />}
-        {aba === 'churrasqueiras' && <Churrasqueiras />}
-        {aba === 'mensalistas' && <Mensalistas quadras={quadras} modalidades={modalidades} />}
-        {aba === 'horarios' && <Horarios />}
-      </div>
-    </main>
-  );
-}
-
-function BotaoAba({ ativo, onClick, children }) {
-  return (
-    <button
-      onClick={onClick}
-      className={`px-4 py-2 rounded-full text-sm font-semibold transition-colors ${
-        ativo ? 'bg-coral text-night' : 'bg-night-panel text-areia-muted hover:text-areia'
-      }`}
+    <AdminShell
+      staff={staff}
+      aba={aba}
+      onMudarAba={setAba}
+      onLogout={fazerLogout}
+      titulo={TITULOS_ABA[aba]}
     >
-      {children}
-    </button>
+      {aba === 'agenda' && <AgendaDia quadras={quadras} modalidades={modalidades} horaInicioNoturno={horaInicioNoturno} />}
+      {aba === 'eventos' && <Eventos quadras={quadras} modalidades={modalidades} />}
+      {aba === 'churrasqueiras' && <Churrasqueiras />}
+      {aba === 'mensalistas' && <Mensalistas quadras={quadras} modalidades={modalidades} />}
+      {aba === 'horarios' && <Horarios />}
+    </AdminShell>
   );
 }
 
@@ -124,25 +90,39 @@ function TelaLogin({ onEntrar }) {
 
   return (
     <main className="min-h-screen flex items-center justify-center px-4 bg-night text-areia">
-      <div className="bg-night-panel border border-night-line rounded-2xl p-8 w-full max-w-sm">
-        <h1 className="font-display text-3xl tracking-wide mb-1">PAINEL DO BALCÃO</h1>
-        <p className="text-areia-muted text-sm mb-6">Digite seu código de acesso</p>
-        <input
-          type="password"
-          value={codigo}
-          onChange={(e) => setCodigo(e.target.value)}
-          onKeyDown={(e) => e.key === 'Enter' && entrar()}
-          className="bg-night border border-night-line rounded-lg px-4 py-3 text-areia w-full mb-3"
-          placeholder="Código de acesso"
-        />
-        {erro && <p className="text-erro text-sm mb-3">{erro}</p>}
-        <button
-          onClick={entrar}
-          disabled={!codigo || verificando}
-          className="bg-coral hover:bg-coral-hover disabled:opacity-30 text-night font-semibold px-6 py-3 rounded-full w-full transition-colors"
-        >
-          {verificando ? 'Verificando...' : 'Entrar'}
-        </button>
+      <div className="w-full max-w-sm">
+        <div className="flex items-center gap-2.5 justify-center mb-6">
+          <svg width="30" height="30" viewBox="0 0 24 24" fill="none" className="text-coral shrink-0">
+            <rect x="3" y="3" width="18" height="18" rx="4" stroke="currentColor" strokeWidth="1.75" />
+            <path d="M3 9h18M9 21V9" stroke="currentColor" strokeWidth="1.75" />
+          </svg>
+          <div className="leading-tight text-left">
+            <p className="font-display text-2xl tracking-wide">AREIA</p>
+            <p className="text-[11px] text-areia-muted -mt-1">Gestão de quadras</p>
+          </div>
+        </div>
+
+        <div className="bg-night-panel border border-night-line rounded-2xl p-8">
+          <h1 className="font-display text-2xl tracking-wide mb-1">PAINEL DO BALCÃO</h1>
+          <p className="text-areia-muted text-sm mb-6">Digite seu código de acesso</p>
+          <input
+            type="password"
+            value={codigo}
+            onChange={(e) => setCodigo(e.target.value)}
+            onKeyDown={(e) => e.key === 'Enter' && entrar()}
+            className="bg-night border border-night-line rounded-lg px-4 py-3 text-areia w-full mb-3 focus:border-coral outline-none transition-colors"
+            placeholder="Código de acesso"
+            autoFocus
+          />
+          {erro && <p className="text-erro text-sm mb-3">{erro}</p>}
+          <button
+            onClick={entrar}
+            disabled={!codigo || verificando}
+            className="bg-coral hover:bg-coral-hover disabled:opacity-30 text-night font-semibold px-6 py-3 rounded-full w-full transition-colors"
+          >
+            {verificando ? 'Verificando...' : 'Entrar'}
+          </button>
+        </div>
       </div>
     </main>
   );
