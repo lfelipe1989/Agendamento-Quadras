@@ -75,6 +75,8 @@ export default function AgendaDia({ quadras, modalidades, horaInicioNoturno }) {
   const [mostrarCalendario, setMostrarCalendario] = useState(false);
   const hojeStr = dataParaString(new Date());
   const ehHoje = data === hojeStr;
+  // Dia já passou: a agenda vira histórico, não dá mais pra criar/alterar nada nele.
+  const ehPassado = data < hojeStr;
 
   function mudarDia(delta) {
     const d = new Date(`${data}T00:00:00`);
@@ -126,7 +128,10 @@ export default function AgendaDia({ quadras, modalidades, horaInicioNoturno }) {
           ›
         </button>
       </div>
-      <p className="text-areia-muted text-sm mb-6">{DIAS_SEMANA[new Date(`${data}T00:00:00`).getDay()]}-feira · {formatarDataExtenso(data)}</p>
+      <p className="text-areia-muted text-sm mb-6">
+        {DIAS_SEMANA[new Date(`${data}T00:00:00`).getDay()]}-feira · {formatarDataExtenso(data)}
+        {ehPassado && <span className="ml-2 text-areia-muted/70">· 🔒 histórico (somente visualização)</span>}
+      </p>
 
       {carregando && <p className="text-areia-muted mb-4">Carregando...</p>}
 
@@ -163,7 +168,7 @@ export default function AgendaDia({ quadras, modalidades, horaInicioNoturno }) {
                       onClick={() =>
                         item
                           ? setDetalheItem({ item, quadra: q })
-                          : setCelulaSelecionada({ quadra: q, horario: slot })
+                          : (!ehPassado && setCelulaSelecionada({ quadra: q, horario: slot }))
                       }
                       style={
                         item
@@ -230,6 +235,7 @@ export default function AgendaDia({ quadras, modalidades, horaInicioNoturno }) {
           quadras={quadras}
           modalidades={modalidades}
           horaInicioNoturno={horaInicioNoturno}
+          somenteLeitura={ehPassado}
           onFechar={() => setDetalheItem(null)}
           onAtualizado={() => { setDetalheItem(null); carregar(); }}
         />
@@ -249,6 +255,7 @@ export default function AgendaDia({ quadras, modalidades, horaInicioNoturno }) {
           data={data}
           quadras={quadras}
           modalidades={modalidades}
+          somenteLeitura={ehPassado}
           onFechar={() => setDetalheItem(null)}
           onAtualizado={() => { setDetalheItem(null); carregar(); }}
         />
@@ -278,7 +285,7 @@ function InfoEventoModal({ item, quadra, onFechar }) {
   );
 }
 
-function EditarMensalistaDiaModal({ mensalistaId, data, quadras, modalidades, onFechar, onAtualizado }) {
+function EditarMensalistaDiaModal({ mensalistaId, data, quadras, modalidades, somenteLeitura = false, onFechar, onAtualizado }) {
   const [carregando, setCarregando] = useState(true);
   const [clienteNome, setClienteNome] = useState('');
   const [clienteTelefone, setClienteTelefone] = useState('');
@@ -322,6 +329,7 @@ function EditarMensalistaDiaModal({ mensalistaId, data, quadras, modalidades, on
   }, [mensalistaId, data]);
 
   async function salvar() {
+    if (somenteLeitura) return; // trava extra: dia histórico não pode ser alterado
     setSalvando(true);
     setErro(null);
     try {
@@ -377,26 +385,34 @@ function EditarMensalistaDiaModal({ mensalistaId, data, quadras, modalidades, on
             <p className="text-areia-muted text-xs mb-4">
               Horário fixo normal: {base?.quadras?.nome} · {NOMES_MODALIDADE[base?.modalidade]} · {base?.hora_inicio?.slice(0, 5)}–{base?.hora_fim?.slice(0, 5)}
             </p>
-            <p className="text-volei text-xs mb-4">
-              O que você mudar aqui vale só pra {dataFormatada}. O horário fixo definitivo continua igual — pra alterar pra sempre, use a aba Mensalistas.
-            </p>
+            {somenteLeitura ? (
+              <p className="text-aviso text-xs mb-4">
+                🔒 Esse dia já passou — fica registrado como histórico e não pode mais ser alterado.
+              </p>
+            ) : (
+              <p className="text-volei text-xs mb-4">
+                O que você mudar aqui vale só pra {dataFormatada}. O horário fixo definitivo continua igual — pra alterar pra sempre, use a aba Mensalistas.
+              </p>
+            )}
 
-            <div className="space-y-2 mb-4">
-              <label className="flex items-center gap-2 text-sm">
-                <input type="radio" name="opcao" checked={opcao === 'normal'} onChange={() => setOpcao('normal')} />
-                Normal (horário fixo de sempre)
-              </label>
-              <label className="flex items-center gap-2 text-sm">
-                <input type="radio" name="opcao" checked={opcao === 'alterado'} onChange={() => setOpcao('alterado')} />
-                Alterado só nesse dia
-              </label>
-              <label className="flex items-center gap-2 text-sm">
-                <input type="radio" name="opcao" checked={opcao === 'cancelado'} onChange={() => setOpcao('cancelado')} />
-                Cancelado só nesse dia (libera a quadra)
-              </label>
-            </div>
+            {!somenteLeitura && (
+              <div className="space-y-2 mb-4">
+                <label className="flex items-center gap-2 text-sm">
+                  <input type="radio" name="opcao" checked={opcao === 'normal'} onChange={() => setOpcao('normal')} />
+                  Normal (horário fixo de sempre)
+                </label>
+                <label className="flex items-center gap-2 text-sm">
+                  <input type="radio" name="opcao" checked={opcao === 'alterado'} onChange={() => setOpcao('alterado')} />
+                  Alterado só nesse dia
+                </label>
+                <label className="flex items-center gap-2 text-sm">
+                  <input type="radio" name="opcao" checked={opcao === 'cancelado'} onChange={() => setOpcao('cancelado')} />
+                  Cancelado só nesse dia (libera a quadra)
+                </label>
+              </div>
+            )}
 
-            {opcao === 'alterado' && (
+            {!somenteLeitura && opcao === 'alterado' && (
               <div className="space-y-3 mb-4 bg-night rounded-xl p-3">
                 <div className="grid grid-cols-2 gap-3">
                   <label className="block">
@@ -429,13 +445,15 @@ function EditarMensalistaDiaModal({ mensalistaId, data, quadras, modalidades, on
 
             <div className="flex justify-between gap-3 pt-2 border-t border-night-line">
               <button onClick={onFechar} className="text-areia-muted hover:text-areia px-3 py-2 text-sm">Fechar</button>
-              <button
-                onClick={salvar}
-                disabled={salvando}
-                className="bg-coral hover:bg-coral-hover disabled:opacity-30 text-night font-semibold px-6 py-2 rounded-full"
-              >
-                {salvando ? 'Salvando...' : 'Salvar'}
-              </button>
+              {!somenteLeitura && (
+                <button
+                  onClick={salvar}
+                  disabled={salvando}
+                  className="bg-coral hover:bg-coral-hover disabled:opacity-30 text-night font-semibold px-6 py-2 rounded-full"
+                >
+                  {salvando ? 'Salvando...' : 'Salvar'}
+                </button>
+              )}
             </div>
           </>
         )}
@@ -444,7 +462,7 @@ function EditarMensalistaDiaModal({ mensalistaId, data, quadras, modalidades, on
   );
 }
 
-function EditarReservaModal({ reservaId, quadras, modalidades, horaInicioNoturno, onFechar, onAtualizado }) {
+function EditarReservaModal({ reservaId, quadras, modalidades, horaInicioNoturno, somenteLeitura = false, onFechar, onAtualizado }) {
   const [carregando, setCarregando] = useState(true);
   const [clienteId, setClienteId] = useState(null);
   const [clienteNome, setClienteNome] = useState('');
@@ -497,6 +515,7 @@ function EditarReservaModal({ reservaId, quadras, modalidades, horaInicioNoturno
   }, [quadraId, data, reservaId]);
 
   async function salvar() {
+    if (somenteLeitura) return; // trava extra: dia histórico não pode ser alterado
     setSalvando(true);
     setErro(null);
     try {
@@ -534,6 +553,7 @@ function EditarReservaModal({ reservaId, quadras, modalidades, horaInicioNoturno
   }
 
   async function cancelar() {
+    if (somenteLeitura) return; // trava extra: dia histórico não pode ser alterado
     if (!confirm('Cancelar essa reserva?')) return;
     await supabase.from('reservas').update({ status_reserva: 'cancelada' }).eq('id', reservaId);
     onAtualizado();
@@ -542,20 +562,26 @@ function EditarReservaModal({ reservaId, quadras, modalidades, horaInicioNoturno
   return (
     <div className="fixed inset-0 bg-black/60 flex items-center justify-center p-4 z-50">
       <div className="bg-night-panel border border-night-line rounded-2xl p-6 w-full max-w-md max-h-[90vh] overflow-y-auto">
-        <h3 className="font-display text-xl tracking-wide mb-4">EDITAR RESERVA</h3>
+        <h3 className="font-display text-xl tracking-wide mb-4">{somenteLeitura ? 'RESERVA (HISTÓRICO)' : 'EDITAR RESERVA'}</h3>
 
         {carregando ? (
           <p className="text-areia-muted">Carregando...</p>
         ) : (
           <>
+            {somenteLeitura && (
+              <p className="text-aviso text-xs mb-4">
+                🔒 Esse dia já passou — fica registrado como histórico e não pode mais ser alterado.
+              </p>
+            )}
+
             <div className="grid grid-cols-2 gap-3 mb-3">
               <label className="block">
                 <span className="text-sm text-areia-muted block mb-1">Nome</span>
-                <input value={clienteNome} onChange={(e) => setClienteNome(e.target.value)} className="bg-night border border-night-line rounded-lg px-3 py-2 text-areia w-full" />
+                <input disabled={somenteLeitura} value={clienteNome} onChange={(e) => setClienteNome(e.target.value)} className="bg-night border border-night-line rounded-lg px-3 py-2 text-areia w-full disabled:opacity-60" />
               </label>
               <label className="block">
                 <span className="text-sm text-areia-muted block mb-1">Telefone</span>
-                <input value={clienteTelefone} onChange={(e) => setClienteTelefone(e.target.value)} className="bg-night border border-night-line rounded-lg px-3 py-2 text-areia w-full" />
+                <input disabled={somenteLeitura} value={clienteTelefone} onChange={(e) => setClienteTelefone(e.target.value)} className="bg-night border border-night-line rounded-lg px-3 py-2 text-areia w-full disabled:opacity-60" />
               </label>
             </div>
 
@@ -564,49 +590,58 @@ function EditarReservaModal({ reservaId, quadras, modalidades, horaInicioNoturno
                 <span className="text-sm text-areia-muted block mb-1">Data</span>
                 <input
                   type="date"
+                  disabled={somenteLeitura}
                   value={data}
                   onChange={(e) => { setData(e.target.value); setHorarioEscolhido(null); }}
-                  className="bg-night border border-night-line rounded-lg px-3 py-2 text-areia w-full"
+                  className="bg-night border border-night-line rounded-lg px-3 py-2 text-areia w-full disabled:opacity-60"
                 />
               </label>
               <label className="block">
                 <span className="text-sm text-areia-muted block mb-1">Quadra</span>
                 <select
+                  disabled={somenteLeitura}
                   value={quadraId}
                   onChange={(e) => { setQuadraId(e.target.value); setHorarioEscolhido(null); }}
-                  className="bg-night border border-night-line rounded-lg px-3 py-2 text-areia w-full"
+                  className="bg-night border border-night-line rounded-lg px-3 py-2 text-areia w-full disabled:opacity-60"
                 >
                   {quadras.map((q) => <option key={q.id} value={q.id}>{q.nome}</option>)}
                 </select>
               </label>
             </div>
 
-            <label className="block mb-3">
-              <span className="text-sm text-areia-muted block mb-1">Horário</span>
-              {carregandoHorarios ? (
-                <p className="text-areia-muted text-sm">Carregando...</p>
-              ) : (
-                <div className="grid grid-cols-4 gap-2">
-                  {horarios.map((h) => (
-                    <button
-                      key={h.hora_inicio}
-                      disabled={!h.disponivel}
-                      onClick={() => setHorarioEscolhido(h)}
-                      className={`py-2 rounded-lg text-xs border ${
-                        !h.disponivel ? 'border-night-line text-areia-muted/40 line-through cursor-not-allowed'
-                        : horarioEscolhido?.hora_inicio === h.hora_inicio ? 'border-coral text-coral' : 'border-night-line'
-                      }`}
-                    >
-                      {h.hora_inicio}
-                    </button>
-                  ))}
-                </div>
-              )}
-            </label>
+            {!somenteLeitura && (
+              <label className="block mb-3">
+                <span className="text-sm text-areia-muted block mb-1">Horário</span>
+                {carregandoHorarios ? (
+                  <p className="text-areia-muted text-sm">Carregando...</p>
+                ) : (
+                  <div className="grid grid-cols-4 gap-2">
+                    {horarios.map((h) => (
+                      <button
+                        key={h.hora_inicio}
+                        disabled={!h.disponivel}
+                        onClick={() => setHorarioEscolhido(h)}
+                        className={`py-2 rounded-lg text-xs border ${
+                          !h.disponivel ? 'border-night-line text-areia-muted/40 line-through cursor-not-allowed'
+                          : horarioEscolhido?.hora_inicio === h.hora_inicio ? 'border-coral text-coral' : 'border-night-line'
+                        }`}
+                      >
+                        {h.hora_inicio}
+                      </button>
+                    ))}
+                  </div>
+                )}
+              </label>
+            )}
+            {somenteLeitura && horarioEscolhido && (
+              <p className="text-sm text-areia-muted mb-3">
+                Horário: {horarioEscolhido.hora_inicio}–{horarioEscolhido.hora_fim}
+              </p>
+            )}
 
             <label className="block mb-3">
               <span className="text-sm text-areia-muted block mb-1">Modalidade</span>
-              <select value={modalidade} onChange={(e) => setModalidade(e.target.value)} className="bg-night border border-night-line rounded-lg px-3 py-2 text-areia w-full">
+              <select disabled={somenteLeitura} value={modalidade} onChange={(e) => setModalidade(e.target.value)} className="bg-night border border-night-line rounded-lg px-3 py-2 text-areia w-full disabled:opacity-60">
                 {modalidades.map((m) => (
                   <option key={m.modalidade} value={m.modalidade}>{NOMES_MODALIDADE[m.modalidade]}</option>
                 ))}
@@ -616,11 +651,11 @@ function EditarReservaModal({ reservaId, quadras, modalidades, horaInicioNoturno
             <div className="grid grid-cols-2 gap-3 mb-3">
               <label className="block">
                 <span className="text-sm text-areia-muted block mb-1">Valor (R$)</span>
-                <input type="number" step="0.01" value={valor} onChange={(e) => setValor(e.target.value)} className="bg-night border border-night-line rounded-lg px-3 py-2 text-areia w-full" />
+                <input disabled={somenteLeitura} type="number" step="0.01" value={valor} onChange={(e) => setValor(e.target.value)} className="bg-night border border-night-line rounded-lg px-3 py-2 text-areia w-full disabled:opacity-60" />
               </label>
               <label className="block">
                 <span className="text-sm text-areia-muted block mb-1">Forma de pagamento</span>
-                <select value={formaPagamento} onChange={(e) => setFormaPagamento(e.target.value)} className="bg-night border border-night-line rounded-lg px-3 py-2 text-areia w-full">
+                <select disabled={somenteLeitura} value={formaPagamento} onChange={(e) => setFormaPagamento(e.target.value)} className="bg-night border border-night-line rounded-lg px-3 py-2 text-areia w-full disabled:opacity-60">
                   <option value="dinheiro">Dinheiro</option>
                   <option value="pix">Pix</option>
                   <option value="cartao">Cartão</option>
@@ -631,18 +666,21 @@ function EditarReservaModal({ reservaId, quadras, modalidades, horaInicioNoturno
             </div>
 
             <label className="flex items-center gap-2 mb-4">
-              <input type="checkbox" checked={statusPagamento === 'pago'} onChange={(e) => setStatusPagamento(e.target.checked ? 'pago' : 'pendente')} />
+              <input disabled={somenteLeitura} type="checkbox" checked={statusPagamento === 'pago'} onChange={(e) => setStatusPagamento(e.target.checked ? 'pago' : 'pendente')} />
               <span className="text-sm">Pago</span>
             </label>
 
             {erro && <p className="text-erro text-sm mb-3">{erro}</p>}
 
             <div className="flex items-center justify-between gap-3 pt-2 border-t border-night-line">
-              <button onClick={cancelar} className="text-erro hover:opacity-80 text-sm px-2 py-2">
-                Cancelar reserva
-              </button>
-              <div className="flex gap-3">
+              {!somenteLeitura && (
+                <button onClick={cancelar} className="text-erro hover:opacity-80 text-sm px-2 py-2">
+                  Cancelar reserva
+                </button>
+              )}
+              <div className="flex gap-3 ml-auto">
                 <button onClick={onFechar} className="text-areia-muted hover:text-areia px-3 py-2 text-sm">Fechar</button>
+                {!somenteLeitura && (
                 <button
                   onClick={salvar}
                   disabled={!horarioEscolhido || salvando}
@@ -650,6 +688,7 @@ function EditarReservaModal({ reservaId, quadras, modalidades, horaInicioNoturno
                 >
                   {salvando ? 'Salvando...' : 'Salvar alterações'}
                 </button>
+                )}
               </div>
             </div>
           </>
